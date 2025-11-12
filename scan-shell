@@ -1,0 +1,567 @@
+<?php
+set_time_limit(0);
+ini_set('memory_limit', '1024M');
+
+$DOCUMENT_ROOT = rtrim($_SERVER['DOCUMENT_ROOT'], '/');
+
+$scan_results = [];
+$scan_path = isset($_POST['scan_path']) ? realpath($_POST['scan_path']) : $DOCUMENT_ROOT;
+$error_message = '';
+$success_message = '';
+
+$shell_patterns = [
+    '/(eval\s*\(\s*base64_decode\s*\()/i' => 10,
+    '/(eval\s*\(\s*gzinflate\s*\(\s*base64_decode\s*\()/i' => 10,
+    '/(eval\s*\(\s*gzuncompress\s*\(\s*base64_decode\s*\()/i' => 10,
+    '/(eval\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 10,
+    '/(assert\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 10,
+    '/(passthru\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 9,
+    '/(system\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 9,
+    '/(shell_exec\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 9,
+    '/(exec\s*\(isset\s*\(\s*\$_(POST|GET|COOKIE)/i' => 9,
+    '/(preg_replace\s*\(\s*[\'"].*[\'"].*e.*[\'"]\s*,/i' => 10,
+    '/\$_(POST|GET|REQUEST|COOKIE)\[.*\]\s*\(\s*\$_(POST|GET|REQUEST|COOKIE)\[.*\]\s*\)/i' => 10,
+    '/(fwrite\s*\(\s*fopen\s*\(\s*".*\.php"\s*,\s*"w"\s*\)\s*,\s*\$_(POST|GET|COOKIE)/i' => 10,
+    '/(file_put_contents\s*\(\s*".*\.php"\s*,\s*\$_(POST|GET|COOKIE)/i' => 10,
+    '/(c99|r57|wso|anon|fopo|locus|webadmin|sql|webroot|m[a-z]d[a-z]f[a-z]k[a-z])\.php/i' => 10,
+    '/(create_function\s*\()/i' => 9,
+    '/(include|require|include_once|require_once)\s*\(?\s*\$_(POST|GET|REQUEST|COOKIE)\[/i' => 9,
+    '/\$(GLOBALS|HTTP_RAW_POST_DATA)\[.+\]/i' => 7,
+    '/("|\'|\s)(base64_decode|str_rot13|gzinflate|gzuncompress|eval|system|passthru|shell_exec|exec|assert|create_function|preg_replace|include|require)("|\'|\s)\s*\.\s*("|\'|\s)/i' => 7,
+    '/FilesMan|File\s*Manager|Uploader|P\.A\.S|Shell|c99|r57|wso|IndoXploit|Bypass|xploit/i' => 8,
+    '/(passthru\s*\()/i' => 5,
+    '/(shell_exec\s*\()/i' => 5,
+    '/(system\s*\()/i' => 5,
+    '/(proc_open\s*\()/i' => 4,
+    '/(popen\s*\()/i' => 4,
+    '/@ini_set\s*\(\s*[\'"](display_errors|safe_mode|max_execution_time)[\'"]/i' => 5,
+    '/(function_exists\s*\(\s*[\'"](system|eval|passthru|shell_exec|exec)[\'"]\s*\))/i' => 4,
+    '/(show_source|highlight_file)\s*\(/i' => 3,
+    '/(php_uname\s*\()/i' => 3,
+    '/(str_rot13|chr\s*\(|ord\s*\()/i' => 3,
+    '/\$[a-zA-Z_]\w*\s*=\s*\$_(POST|GET|REQUEST|COOKIE)\[/i' => 6,
+    '/\$($[a-zA-Z_]\w*)\s*\(/i' => 10,
+    '/(array_map|array_filter|call_user_func|call_user_func_array)\s*\(\s*[\'"](eval|system|passthru|shell_exec|exec)[\'"]\s*,/i' => 10,
+    '/(array_map|array_filter|call_user_func|call_user_func_array)\s*\(\s*\$_(POST|GET|REQUEST|COOKIE)\[/i' => 10,
+    '/(implode|join)\s*\(\s*array\s*\(\s*(chr|ord)/i' => 9,
+    '/@\s*error_reporting\s*\(\s*0\s*\)/i' => 4,
+    '/\$_(SERVER|ENV)\[[\'"](HTTP_|REMOTE_ADDR)[\'"]\]/i' => 2,
+    '/(chmod|chown|chgrp)\s*\(/i' => 6,
+    '/\$_(FILES|POST|GET)\[.+\]\s*;\s*@move_uploaded_file\s*\(/i' => 9,
+    '/(\$|\s)_[0-9a-f]{2,}\(/i' => 10,
+    '/str_replace\s*\(\s*.*\s*,\s*.*\s*,\s*.*\s*\$_(POST|GET|REQUEST)/i' => 7,
+    '/register_shutdown_function\s*\(\s*[\'"](eval|system|passthru|shell_exec|exec)[\'"]\s*\)/i' => 10,
+    '/function\s+__destruct\s*\(\s*\)\s*\{.*(eval|system|passthru|shell_exec|exec)/is' => 9,
+    '/\$_(SERVER|ENV)\[[\'"]PHP_SELF[\'"]\].*<\?php/i' => 8,
+    '/(pack\s*\(\s*[\'"]H\*\s*[\'"]\s*,\s*.*\))/i' => 9,
+    '/(array_walk|array_walk_recursive)\s*\(\s*\$_(POST|GET|REQUEST|COOKIE)\[.*\]\s*,\s*[\'"](eval|system|passthru)[\'"]\s*\)/i' => 10,
+    '/(mb_ereg_replace)\s*\(.*,.*,.*[\'"]e[\'"]\)/i' => 10,
+    '/\$[a-zA-Z_]\w*\s*\(\s*\.\.\.\$_(POST|GET|REQUEST|COOKIE)/i' => 9,
+];
+
+$file_extensions = ['php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'phps'];
+
+function scan_file_content($filepath, $patterns) {
+    try {
+        $content = @file_get_contents($filepath);
+        if ($content === false) {
+            return null;
+        }
+        $total_score = 0;
+        $matched_patterns = [];
+        foreach ($patterns as $pattern => $score) {
+            if (preg_match($pattern, $content)) {
+                $total_score += $score;
+                $matched_patterns[] = $pattern;
+            }
+        }
+        foreach ($patterns as $pattern => $score) {
+            if (preg_match($pattern, $filepath)) {
+                $total_score += $score;
+                $matched_patterns[] = 'Filename match: ' . $pattern;
+            }
+        }
+        if ($total_score > 0) {
+            $matched_patterns = array_unique($matched_patterns);
+            return ['patterns' => $matched_patterns, 'score' => $total_score];
+        }
+    } catch (Exception $e) {
+    }
+    return null;
+}
+
+function scan_directory($dir, $patterns, $extensions) {
+    global $scan_results, $error_message;
+    if (!is_dir($dir)) {
+        $error_message = "Invalid path or not a directory: " . htmlspecialchars($dir);
+        return;
+    }
+    try {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS),
+            RecursiveIteratorIterator::SELF_FIRST,
+            RecursiveIteratorIterator::CATCH_GET_CHILD
+        );
+        foreach ($iterator as $file) {
+            if ($file->isFile()) {
+                $ext = strtolower($file->getExtension());
+                if (in_array($ext, $extensions)) {
+                    $filepath = $file->getRealPath();
+                    if ($filepath === false) continue;
+                    if ($filepath == __FILE__) continue;
+                    $result = scan_file_content($filepath, $patterns);
+                    if ($result !== null) {
+                        $scan_results[] = [
+                            'path' => $filepath,
+                            'reasons' => $result['patterns'],
+                            'score' => $result['score']
+                        ];
+                    }
+                }
+            }
+        }
+        usort($scan_results, function ($a, $b) {
+            return $b['score'] <=> $a['score'];
+        });
+    } catch (Exception $e) {
+        $error_message = "Error during scan: " . $e->getMessage();
+    }
+}
+
+if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['file'])) {
+    $file_to_delete = realpath(base64_decode($_GET['file']));
+    if ($file_to_delete && file_exists($file_to_delete)) {
+        if ($file_to_delete == __FILE__) {
+            $error_message = "Cannot delete this script itself.";
+        } else {
+            try {
+                if (unlink($file_to_delete)) {
+                    $success_message = "File successfully deleted: " . htmlspecialchars($file_to_delete);
+                } else {
+                    $error_message = "Failed to delete file (check permissions): " . htmlspecialchars($file_to_delete);
+                }
+            } catch (Exception $e) {
+                $error_message = "Error deleting file: " . $e->getMessage();
+            }
+        }
+    } else {
+        $error_message = "File not found for deletion.";
+    }
+}
+
+if (isset($_GET['action']) && $_GET['action'] == 'read' && isset($_GET['file'])) {
+    $file_to_read = realpath(base64_decode($_GET['file']));
+    if ($file_to_read && file_exists($file_to_read) && is_readable($file_to_read)) {
+        $file_content = file_get_contents($file_to_read);
+        header('Content-Type: application/json');
+        echo json_encode(['path' => htmlspecialchars($file_to_read), 'content' => htmlspecialchars($file_content)]);
+        exit;
+    } else {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'File not found or not readable.']);
+        exit;
+    }
+}
+
+if (isset($_POST['scan_path'])) {
+    if (is_dir($scan_path)) {
+        scan_directory($scan_path, $shell_patterns, $file_extensions);
+    } else {
+        $error_message = "Invalid path or not a directory: " . htmlspecialchars($_POST['scan_path']);
+    }
+}
+
+function get_web_url($server_path, $doc_root) {
+    $doc_root = rtrim($doc_root, '/');
+    if (strpos($server_path, $doc_root) === 0) {
+        $web_path = str_replace($doc_root, '', $server_path);
+        $web_path = str_replace('\\', '/', $web_path);
+        return '/' . ltrim($web_path, '/');
+    }
+    return null;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTSMC Shell Scanner V6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+
+        body {
+            background-color: #0d0f12;
+            color: #00e5ff;
+            font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+        }
+        .card {
+            background-color: #1a1c20;
+            border: 1px solid #00e5ff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0 15px #00e5ff33;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem; /* Sharper edges */
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid;
+            text-transform: uppercase; /* Tech feel */
+            letter-spacing: 0.05em;
+        }
+        .btn-primary {
+            background-color: #00e5ff;
+            border-color: #00e5ff;
+            color: #0d0f12;
+        }
+        .btn-primary:hover {
+            background-color: #ffffff;
+            border-color: #ffffff;
+            box-shadow: 0 0 10px #ffffff;
+        }
+        .btn-danger {
+            background-color: transparent;
+            border-color: #ff4d4d;
+            color: #ff4d4d;
+        }
+        .btn-danger:hover {
+            background-color: #ff4d4d;
+            color: #0d0f12;
+            box-shadow: 0 0 10px #ff4d4d;
+        }
+        .btn-secondary {
+            background-color: transparent;
+            border-color: #00e5ff;
+            color: #00e5ff;
+        }
+        .btn-secondary:hover {
+            background-color: #00e5ff;
+            color: #0d0f12;
+        }
+        .btn-warning {
+            background-color: transparent;
+            border-color: #ffeb3b;
+            color: #ffeb3b;
+        }
+        .btn-warning:hover {
+            background-color: #ffeb3b;
+            color: #0d0f12;
+            box-shadow: 0 0 10px #ffeb3b;
+        }
+        .btn-danger.confirm-delete {
+            background-color: #b91c1c;
+            border-color: #b91c1c;
+            color: #ffffff;
+        }
+        .btn-clicked {
+            background-color: #007bff !important; /* Kept blue for contrast */
+            border-color: #007bff !important;
+            color: white !important;
+            box-shadow: 0 0 10px #007bff;
+        }
+        .btn-clicked svg { color: white !important; }
+        .btn svg {
+            width: 1rem;
+            height: 1rem;
+        }
+        .input-field {
+            width: 100%;
+            background-color: #1a1c20;
+            color: #00e5ff;
+            border: 1px solid #00e5ff;
+            border-radius: 0.25rem;
+            padding: 0.75rem 1rem;
+            font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+        }
+        .input-field:focus {
+            outline: none;
+            box-shadow: 0 0 10px #00e5ff;
+        }
+        #file-reader-modal { display: none; }
+        .modal-content {
+            max-height: 70vh;
+            background-color: #0d0f12;
+            border: 1px solid #00e5ff;
+        }
+        #modal-title {
+            word-break: break-all;
+            color: #00e5ff;
+        }
+        .table-no-scroll {
+            table-layout: fixed;
+            width: 100%;
+        }
+        .table-no-scroll td, .table-no-scroll th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-all;
+        }
+        .col-skor { width: 8%; }
+        .col-path { width: 42%; }
+        .col-alasan { width: 30%; }
+        .col-tindakan { width: 20%; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1c20; }
+        ::-webkit-scrollbar-thumb { background: #00e5ff; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ffffff; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div>
+        <h1 class="text-3xl font-bold text-white mb-4">PHP Shell Scanner <span class="text-lg text-cyan-400">v6 Overdrive</span></h1>
+
+        <div class="card p-6 mb-6 border-red-500 shadow-lg shadow-red-500/20">
+            <h2 class="text-xl font-semibold text-red-400 mb-3">SECURITY WARNING!</h2>
+            <p class="text-red-300">
+                This is a powerful administrative tool. It can delete files from your server.
+                <br><strong>After you are finished, IMMEDIATELY DELETE this file <code class="bg-gray-800 px-2 py-1 rounded"><?php echo basename(__FILE__); ?></code> from your server.</strong>
+                <br>Leaving it on the server creates a massive security vulnerability.
+            </p>
+        </div>
+
+        <?php if ($error_message): ?>
+            <div class="card p-4 mb-6 bg-red-900 border-red-700">
+                <p class="font-semibold text-white">Error: <?php echo $error_message; ?></p>
+            </div>
+        <?php endif; ?>
+        <?php if ($success_message): ?>
+            <div class="card p-4 mb-6 bg-green-900 border-green-700">
+                <p class="font-semibold text-white"><?php echo $success_message; ?></p>
+            </div>
+        <?php endif; ?>
+
+        <div class="card p-6 mb-6">
+            <form method="POST" action="">
+                <label for="scan_path" class="block text-lg font-medium text-cyan-300 mb-2">Scan Path</label>
+                <p class="text-sm text-gray-400 mb-3">Enter the absolute server path you want to scan. Defaults to document root.</p>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <input type="text" id="scan_path" name="scan_path" class="input-field flex-grow" value="<?php echo htmlspecialchars($scan_path); ?>" required>
+                    <button type="submit" class="btn btn-primary px-8">Scan</button>
+                </div>
+            </form>
+        </div>
+
+        <?php if (isset($_POST['scan_path'])): ?>
+            <div class="card overflow-hidden">
+                <div class="p-6 border-b border-cyan-700">
+                    <h2 class="text-2xl font-semibold text-white">Scan Results</h2>
+                    <p class="text-cyan-400">Found <?php echo count($scan_results); ?> suspicious files in '<?php echo htmlspecialchars($scan_path); ?>'.</p>
+                </div>
+
+                <?php if (empty($scan_results)): ?>
+                    <div class="p-6 text-center">
+                        <p class="text-lg text-green-400">No suspicious files found.</p>
+                    </div>
+                <?php else: ?>
+                    <table class="w-full table-no-scroll">
+                        <thead class="bg-gray-800 bg-opacity-50">
+                            <tr>
+                                <th class="p-4 text-left text-sm font-semibold text-cyan-300 uppercase col-skor">Score</th>
+                                <th class="p-4 text-left text-sm font-semibold text-cyan-300 uppercase col-path">File Path</th>
+                                <th class="p-4 text-left text-sm font-semibold text-cyan-300 uppercase col-alasan">Reasons (Patterns Detected)</th>
+                                <th class="p-4 text-left text-sm font-semibold text-cyan-300 uppercase col-tindakan">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-cyan-900">
+                            <?php foreach ($scan_results as $result): 
+                                $file_b64 = base64_encode($result['path']);
+                                $dir_path_js = htmlspecialchars(addslashes(dirname($result['path']) . DIRECTORY_SEPARATOR));
+                                $web_url = get_web_url($result['path'], $DOCUMENT_ROOT);
+                            ?>
+                                <tr class="hover:bg-cyan-900 hover:bg-opacity-20 transition-colors" data-filepath="<?php echo htmlspecialchars($result['path']); ?>">
+                                    <td class="p-4">
+                                        <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold <?php
+                                            if ($result['score'] >= 10) echo 'bg-red-700 text-red-100';
+                                            elseif ($result['score'] >= 5) echo 'bg-yellow-600 text-yellow-100';
+                                            else echo 'bg-blue-600 text-blue-100';
+                                        ?>">
+                                            <?php echo $result['score']; ?>
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-sm text-cyan-300">
+                                        <?php echo htmlspecialchars($result['path']); ?>
+                                    </td>
+                                    <td class="p-4 text-sm text-cyan-400">
+                                        <ul class="list-disc list-inside">
+                                            <?php foreach ($result['reasons'] as $reason): ?>
+                                                <li class="text-xs"><?php echo htmlspecialchars($reason); ?></li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </td>
+                                    <td class="p-4 whitespace-nowrap">
+                                        <div class="flex flex-wrap gap-2">
+                                            
+                                            <button 
+                                                onclick="markButtonClicked(this, '<?php echo htmlspecialchars(addslashes($result['path'])); ?>', 'copy'); copyToClipboard(this, '<?php echo $dir_path_js; ?>');" 
+                                                class="btn btn-secondary text-xs btn-copy">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.121A1.5 1.5 0 0 1 17 6.621V16.5A1.5 1.5 0 0 1 15.5 18H14a.5.5 0 0 1 0-1h1.5a.5.5 0 0 0 .5-.5V7.379a.5.5 0 0 0-.146-.353l-3.121-3.121A.5.5 0 0 0 12.379 3H8.5a.5.5 0 0 0-.5.5v1A.5.5 0 0 1 7 4.5v-1Z"></path><path d="M5.5 4A1.5 1.5 0 0 0 4 5.5v11A1.5 1.5 0 0 0 5.5 18h6A1.5 1.5 0 0 0 13 16.5V5.5A1.5 1.5 0 0 0 11.5 4h-6ZM5 5.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-.5.5h-6a.5.5 0 0 1-.5-.5v-11Z"></path></svg>
+                                                <span class="btn-text">Copy Path</span>
+                                            </button>
+                                            
+                                            <button 
+                                                onclick="markButtonClicked(this, '<?php echo htmlspecialchars(addslashes($result['path'])); ?>', 'read'); readFile('<?php echo $file_b64; ?>');" 
+                                                class="btn btn-warning text-xs btn-read">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"></path><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.18l.83-1.034a1.65 1.65 0 0 0 .82-1.815l-.328-1.22a1.65 1.65 0 0 1 1.53-2.034l1.22.329a1.65 1.65 0 0 0 1.814-.82l1.034-.83a1.651 1.651 0 0 1 1.18 0l1.034.83a1.65 1.65 0 0 0 1.815.82l1.22-.329a1.65 1.65 0 0 1 2.034 1.53l-.329 1.22a1.65 1.65 0 0 0 .82 1.814l.83 1.035a1.65 1.65 0 0 1 0 1.18l-.83 1.034a1.65 1.65 0 0 0-.82 1.815l.329 1.22a1.65 1.65 0 0 1-1.53 2.034l-1.22-.329a1.65 1.65 0 0 0-1.814.82l-1.034.83a1.651 1.651 0 0 1-1.18 0l-1.034-.83a1.65 1.65 0 0 0-1.815-.82l-1.22.329a1.65 1.65 0 0 1-2.034-1.53l.329-1.22a1.65 1.65 0 0 0-.82-1.814l-.83-1.035Z" clip-rule="evenodd"></path></svg>
+                                                <span class="btn-text">Read File</span>
+                                            </button>
+                                            
+                                            <?php if ($web_url): ?>
+                                                <a href="<?php echo htmlspecialchars($web_url); ?>" target="_blank" 
+                                                    onclick="markButtonClicked(this, '<?php echo htmlspecialchars(addslashes($result['path'])); ?>', 'open');"
+                                                    class="btn btn-secondary text-xs btn-open">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M12.232 4.175a.5.5 0 0 1 0 .65l-2.8 3.05a.5.5 0 0 0 .334.875h5.468a.5.5 0 0 1 .5.5v5.468a.5.5 0 0 0 .875.334l3.05-2.8a.5.5 0 0 1 .65 0l3.05 2.8a.5.5 0 0 0 .875-.334V5.5a.5.5 0 0 1 .5-.5h5.468a.5.5 0 0 0 .334-.875l-2.8-3.05a.5.5 0 0 1 0-.65l2.8-3.05a.5.5 0 0 0-.334-.875H5.5a.5.5 0 0 1-.5-.5V.5a.5.5 0 0 0-.875-.334l-3.05 2.8a.5.5 0 0 1-.65 0l-3.05-2.8A.5.5 0 0 0 .5.5v13.968a.5.5 0 0 0 .875.334l2.8-3.05a.5.5 0 0 1 .65 0l2.8 3.05a.5.5 0 0 0 .875-.334V5.5a.5.5 0 0 1 .5-.5h5.468a.5.5 0 0 0 .334-.875l-3.05-2.8ZM5 4.332 3.832 3.164 2.664 4.332 3.832 5.5 5 4.332ZM15.5 3.832 14.332 5 13.164 3.832 14.332 2.664 15.5 3.832Z" clip-rule="evenodd"></path><path d="M8.75 3.5a.5.5 0 0 1 .5.5v1.468a.5.5 0 0 0 .875.334l2.8-3.05a.5.5 0 0 1 .65 0l2.8 3.05a.5.5 0 0 0 .875-.334V.5a.5.5 0 0 1 .5-.5h5.468a.5.5 0 0 0 .334-.875l-3.05-2.8a.5.5 0 0 1 0-.65l3.05-2.8a.5.5 0 0 0-.334-.875h-13a.5.5 0 0 1-.5-.5V.5a.5.5 0 0 0-.875-.334l-3.05 2.8a.5.5 0 0 1-.65 0l-3.05-2.8A.5.5 0 0 0 .5.5v13.968a.5.5 0 0 0 .875.334l3.05-2.8a.5.5 0 0 1 .65 0l3.05 2.8a.5.5 0 0 0 .875-.334V5.5a.5.5 0 0 1 .5-.5h1.468a.5.5 0 0 0 .334-.875L8.75 3.5Z"></path></svg>
+                                                    <span class="btn-text">Open</span>
+                                                </a>
+                                            <?php endif; ?>
+
+                                            <button 
+                                                onclick="confirmDelete(this, '<?php echo $file_b64; ?>')"
+                                                class="btn btn-danger text-xs btn-delete">
+                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-1.008.12-1.921.5-2.684 1.108A6.5 6.5 0 0 0 2.5 9.75V15.5a.75.75 0 0 0 .75.75h13.5a.75.75 0 0 0 .75-.75V9.75a6.5 6.5 0 0 0-.816-3.349c-.763-.608-1.676-.988-2.684-1.108V3.75A2.75 2.75 0 0 0 11.25 1H8.75ZM7.5 3.75a1.25 1.25 0 0 1 1.25-1.25h1.25a1.25 1.25 0 0 1 1.25 1.25v.443c-.808.121-1.558.428-2.199.878A3.498 3.498 0 0 0 7.5 5.193V3.75Z" clip-rule="evenodd"></path><path d="M11.5 8.25a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75ZM8.5 8.25a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75Z"></path></svg>
+                                                <span class="btn-text">Delete</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Modal untuk Read File -->
+    <div id="file-reader-modal" class="fixed inset-0 bg-black bg-opacity-75 z-50 p-4 md:p-8">
+        <div class="card max-w-4xl mx-auto mt-10 shadow-lg border-cyan-700">
+            <div class="p-5 border-b border-cyan-700 flex justify-between items-center">
+                <h3 class="text-xl font-semibold" id="modal-title">Read File</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+            </div>
+            <div class="p-5 modal-content overflow-auto">
+                <pre id="modal-content" class="text-sm text-white"></pre>
+            </div>
+            <div class="p-5 border-t border-cyan-700 text-right">
+                <button onclick="closeModal()" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CLICKED_STORAGE_KEY = 'scanshell_clicked_buttons';
+        let clickedButtons = {};
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadButtonStates();
+        });
+
+        function loadButtonStates() {
+            clickedButtons = JSON.parse(localStorage.getItem(CLICKED_STORAGE_KEY) || '{}');
+            document.querySelectorAll('tr[data-filepath]').forEach(row => {
+                const filepath = row.dataset.filepath;
+                if (!clickedButtons[filepath]) return;
+
+                if (clickedButtons[filepath].includes('copy')) {
+                    row.querySelector('.btn-copy')?.classList.add('btn-clicked');
+                }
+                if (clickedButtons[filepath].includes('read')) {
+                    row.querySelector('.btn-read')?.classList.add('btn-clicked');
+                }
+                if (clickedButtons[filepath].includes('open')) {
+                    row.querySelector('.btn-open')?.classList.add('btn-clicked');
+                }
+            });
+        }
+
+        function markButtonClicked(buttonEl, filepath, action) {
+            if (!clickedButtons[filepath]) {
+                clickedButtons[filepath] = [];
+            }
+            if (!clickedButtons[filepath].includes(action)) {
+                clickedButtons[filepath].push(action);
+            }
+            localStorage.setItem(CLICKED_STORAGE_KEY, JSON.stringify(clickedButtons));
+            buttonEl.classList.add('btn-clicked');
+        }
+
+        function copyToClipboard(buttonEl, text) {
+            const originalHTML = buttonEl.innerHTML;
+            navigator.clipboard.writeText(text).then(function() {
+                buttonEl.innerHTML = '<span class="btn-text">Copied!</span>';
+                setTimeout(() => {
+                    buttonEl.innerHTML = originalHTML;
+                }, 2000);
+            }, function(err) {
+                buttonEl.innerHTML = '<span class="btn-text">Failed...</span>';
+                setTimeout(() => {
+                    buttonEl.innerHTML = originalHTML;
+                }, 2000);
+            });
+        }
+        
+        function confirmDelete(buttonEl, file_b64) {
+            const href = `?action=delete&file=${file_b64}&scan_path=<?php echo urlencode($scan_path); ?>`;
+            if (buttonEl.classList.contains('confirm-delete')) {
+                window.location.href = href;
+            } else {
+                buttonEl.classList.add('confirm-delete');
+                const originalHTML = buttonEl.innerHTML;
+                buttonEl.innerHTML = '<span class="btn-text">Sure? Delete</span>';
+                setTimeout(() => {
+                    buttonEl.classList.remove('confirm-delete');
+                    buttonEl.innerHTML = originalHTML;
+                }, 3000);
+            }
+        }
+
+        const modal = document.getElementById('file-reader-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+
+        function closeModal() {
+            modal.style.display = 'none';
+            modalContent.textContent = '';
+            modalTitle.textContent = 'Read File';
+        }
+
+        function readFile(file_b64) {
+            modalContent.textContent = 'Loading file content...';
+            modal.style.display = 'block';
+            fetch('?action=read&file=' + file_b64)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        modalTitle.textContent = 'Error';
+                        modalContent.textContent = data.error;
+                    } else {
+                        modalTitle.textContent = 'Reading: ' + data.path;
+                        modalContent.textContent = data.content;
+                    }
+                })
+                .catch(err => {
+                    modalTitle.textContent = 'Error';
+                    modalContent.textContent = 'Failed to load file: ' + err;
+                });
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+        
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && modal.style.display === 'block') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
