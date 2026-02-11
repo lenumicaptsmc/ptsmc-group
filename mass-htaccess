@@ -75,7 +75,7 @@ $defaultSource = $defaultBase . '/net/.htaccess';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mass .htaccess Deployer Pro</title>
+    <title>htaccess Deployer</title>
     <style>
         :root {
             --bg: #0f172a;
