@@ -1,0 +1,371 @@
+<?php
+/**
+ * O.P. SEO SITEMAP ENGINE V2 BY PTSMC TEAM
+ * Mencegah Error "Sitemap adalah HTML" di GSC
+ */
+
+// Matikan error reporting di layar agar tidak merusak struktur output jika ada peringatan server
+error_reporting(0);
+date_default_timezone_set('UTC');
+
+$message = '';
+$messageType = '';
+$pingStatus = '';
+$selfDestruct = false;
+
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
+    $domainName = $_SERVER['HTTP_HOST'];
+    return $protocol . $domainName;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $urls_input = $_POST['urls'] ?? '';
+    $filename = $_POST['filename'] ?? 'sitemap.xml';
+    
+    $raw_urls = array_filter(array_map('trim', explode("\n", $urls_input)));
+    $processed_urls = [];
+    $baseUrl = rtrim(getBaseUrl(), '/');
+
+    if (empty($raw_urls)) {
+        $message = "Harap masukkan minimal 1 URL atau path target.";
+        $messageType = "error";
+    } else {
+        foreach ($raw_urls as $u) {
+            // Bersihkan input dari karakter aneh yang bisa merusak XML
+            $u = filter_var($u, FILTER_SANITIZE_URL);
+            if (!preg_match("~^(?:f|ht)tps?://~i", $u)) {
+                $u = $baseUrl . '/' . ltrim($u, '/');
+            }
+            if (filter_var($u, FILTER_VALIDATE_URL)) {
+                $processed_urls[] = $u;
+            }
+        }
+
+        if (empty($processed_urls)) {
+            $message = "Format URL tidak valid. Pastikan input benar.";
+            $messageType = "error";
+        } else {
+            try {
+                // Inisialisasi DOMDocument dengan Strict Mode
+                $dom = new DOMDocument('1.0', 'UTF-8');
+                $dom->preserveWhiteSpace = false;
+                $dom->formatOutput = true;
+
+                $urlset = $dom->createElement('urlset');
+                $urlset->setAttribute('xmlns', 'http://www.sitemaps.org/schemas/sitemap/0.9');
+                $urlset->setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
+                $urlset->setAttribute('xsi:schemaLocation', 'http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd');
+                $dom->appendChild($urlset);
+
+                $currentDate = date('c');
+
+                foreach ($processed_urls as $url) {
+                    $urlNode = $dom->createElement('url');
+                    
+                    // htmlspecialchars dengan flag ENT_QUOTES | ENT_XML1 sangat krusial agar tidak ada tag HTML yang bocor
+                    $locNode = $dom->createElement('loc', htmlspecialchars($url, ENT_QUOTES | ENT_XML1, 'UTF-8'));
+                    $urlNode->appendChild($locNode);
+                    
+                    $lastmodNode = $dom->createElement('lastmod', $currentDate);
+                    $urlNode->appendChild($lastmodNode);
+                    
+                    $changefreqNode = $dom->createElement('changefreq', 'hourly');
+                    $urlNode->appendChild($changefreqNode);
+                    
+                    $priorityNode = $dom->createElement('priority', '1.00');
+                    $urlNode->appendChild($priorityNode);
+                    
+                    $urlset->appendChild($urlNode);
+                }
+
+                $rootPath = $_SERVER['DOCUMENT_ROOT'] . '/' . ltrim($filename, '/');
+                $xmlOutput = $dom->saveXML();
+                
+                // Hapus whitespace yang tidak sengaja terbawa di awal/akhir dokumen
+                $xmlOutput = trim($xmlOutput);
+
+                $result = @file_put_contents($rootPath, $xmlOutput);
+
+                if ($result !== false) {
+                    $sitemapUrl = $baseUrl . '/' . ltrim($filename, '/');
+                    $message = "Sitemap berhasil di-generate. File fisik XML murni telah tercipta di root.";
+                    $messageType = "success";
+
+                    // Auto-Ping Google
+                    $pingUrl = "https://www.google.com/ping?sitemap=" . urlencode($sitemapUrl);
+                    $ch = curl_init($pingUrl);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HEADER, true);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode == 200) {
+                        $pingStatus = "Google Ping Sukses! Crawler diprioritaskan.";
+                    } else {
+                        $pingStatus = "Google Ping terkirim.";
+                    }
+
+                    $selfDestruct = true;
+
+                } else {
+                    $message = "Gagal menyimpan file. Cek permission folder (CHMOD 755/777).";
+                    $messageType = "error";
+                }
+            } catch (Exception $e) {
+                $message = "Engine Error: " . $e->getMessage();
+                $messageType = "error";
+            }
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Engine: Sitemap Pro Generator</title>
+    <style>
+        :root {
+            --primary: #000000;
+            --primary-hover: #333333;
+            --bg-color: #f7f7f7;
+            --card-bg: #ffffff;
+            --text-main: #111111;
+            --text-muted: #888888;
+            --border-color: #eaeaea;
+            --success-bg: #f0fdf4;
+            --success-border: #bbf7d0;
+            --success-text: #166534;
+            --error-bg: #fef2f2;
+            --error-border: #fecaca;
+            --error-text: #991b1b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Smooth Entry Animation */
+        .engine-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 650px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04);
+            opacity: 0;
+            transform: translateY(20px);
+            animation: smoothFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes smoothFadeUp {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: 400;
+        }
+
+        /* Smooth Alert Animation */
+        .alert {
+            padding: 18px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 1.6;
+            opacity: 0;
+            animation: fadeIn 0.6s ease forwards 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .alert.success {
+            background-color: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
+        }
+
+        .alert.error {
+            background-color: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+        }
+
+        .alert strong { font-weight: 600; }
+
+        .destruct-notice {
+            margin-top: 12px;
+            font-size: 13px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0,0,0,0.05);
+            color: var(--success-text);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .gsc-warning {
+            margin-top: 12px;
+            font-size: 12px;
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px dashed var(--success-border);
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+            opacity: 0;
+            animation: smoothFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.2s;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--text-main);
+            letter-spacing: -0.2px;
+        }
+
+        textarea, input[type="text"] {
+            width: 100%;
+            background-color: #fafafa;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 16px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            color: var(--text-main);
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 140px;
+            line-height: 1.6;
+        }
+
+        textarea:focus, input[type="text"]:focus {
+            background-color: #ffffff;
+            border-color: var(--text-main);
+            box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn-submit {
+            background-color: var(--primary);
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            padding: 16px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+            animation: smoothFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards 0.4s;
+        }
+
+        .btn-submit:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+<div class="engine-container">
+    <div class="header">
+        <h1>Sitemap Engine Pro</h1>
+        <p>Strict XML Formulation & GSC Priority Optimization.</p>
+    </div>
+
+    <?php if ($message): ?>
+        <div class="alert <?php echo $messageType; ?>">
+            <div><strong>Status:</strong> <?php echo $message; ?></div>
+            <?php if ($pingStatus): ?>
+                <div style="margin-top: 6px;"><strong>SEO Ping:</strong> <?php echo $pingStatus; ?></div>
+            <?php endif; ?>
+            
+            <?php if ($selfDestruct): ?>
+                <div class="gsc-warning">
+                    <strong>Catatan Penting GSC:</strong> Jika Google masih membaca "Sitemap adalah HTML", itu berarti server CMS Anda (Nginx/htaccess/Cloudflare) melakukan *redirect* URL sitemap.xml ke halaman 404. Pastikan file XML bisa diakses langsung lewat browser tanpa *redirect*.
+                </div>
+                <div class="destruct-notice">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    AUTO-DESTRUCT AKTIF: Engine telah menghapus dirinya sendiri.
+                </div>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!$selfDestruct): ?>
+    <form method="POST">
+        <div class="form-group">
+            <label>TARGET URL / FOLDER PATHS</label>
+            <textarea name="urls" placeholder="Example:&#10;https://domain.com/folder/&#10;/folder/" required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>OUTPUT FILENAME</label>
+            <input type="text" name="filename" value="sitemap.xml" required>
+        </div>
+
+        <button type="submit" class="btn-submit">Generate</button>
+    </form>
+    <?php endif; ?>
+</div>
+
+</body>
+</html>
+<?php
+// AUTO-DESTRUCT SEQUENCE
+if ($selfDestruct) {
+    @unlink(__FILE__);
+}
+?>
