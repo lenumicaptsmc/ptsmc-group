@@ -166,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .engine-container {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
-            border-radius: 16px;
+            border-radius: 35px;
             width: 100%;
             max-width: 650px;
             padding: 40px;
@@ -202,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* Smooth Alert Animation */
         .alert {
             padding: 18px 20px;
-            border-radius: 10px;
+            border-radius: 19px;
             margin-bottom: 30px;
             font-size: 14px;
             line-height: 1.6;
@@ -246,7 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 12px;
             background: #fff;
             padding: 10px;
-            border-radius: 6px;
+            border-radius: 15px;
             border: 1px dashed var(--success-border);
         }
 
@@ -269,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 100%;
             background-color: #fafafa;
             border: 1px solid var(--border-color);
-            border-radius: 10px;
+            border-radius: 15px;
             padding: 16px;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             font-size: 13px;
@@ -294,7 +294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: var(--primary);
             color: #ffffff;
             border: none;
-            border-radius: 10px;
+            border-radius: 19px;
             padding: 16px 24px;
             font-size: 15px;
             font-weight: 600;
@@ -348,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form method="POST">
         <div class="form-group">
             <label>TARGET URL / FOLDER PATHS</label>
-            <textarea name="urls" placeholder="Example:&#10;https://domain.com/folder/&#10;/folder/" required></textarea>
+            <textarea name="urls" placeholder="https://domain.com/folder/" required></textarea>
         </div>
 
         <div class="form-group">
