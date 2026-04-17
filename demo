@@ -1031,7 +1031,7 @@ border-color: var(--primary-color); }
         .file-icon[data-type="file"] .feather, .file-icon[data-type="video"] .feather, .file-icon[data-type="audio"] .feather, .file-icon[data-type="pdf"] .feather { color: var(--icon-color-file);
 }
         
-        .danger-indicator { color: #f9ff00;
+        .danger-indicator { color: #ff0000;
 display: inline-flex; align-items: center; }
         .danger-indicator .feather { width: 20px; height: 20px;
 }
