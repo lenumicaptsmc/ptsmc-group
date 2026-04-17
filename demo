@@ -1917,7 +1917,7 @@ const dateFormatted = formatDate(item.mtime);
                 
                 const isRoot = item.owner === 'root';
                 const ownerClass = isRoot ? 'owner-root' : '';
-const permColor = isRoot ? '#ff1800' : 'var(--success-color)';
+const permColor = isRoot ? '#ff1800' : (item.perms === '0444' ? '#ff0000' : 'var(--success-color)');
 
                 const dangerIndicatorHTML = item.contains_danger_keyword ?
 `<span class="danger-indicator" title="Contains potentially dangerous functions"><i data-feather="alert-triangle"></i></span>` : '';
