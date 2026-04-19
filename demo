@@ -1,7 +1,7 @@
 <?php
 /**
- * Emerald v8.6 - A PTSMC GROUP Project.
- * @version 8.6 (Major Patch - Universal Editor, Stealth Encryptor, UI Hardening, MacOS Icons, Emerald Login UI, Terminal Auto-Flush)
+ * Emerald v10.0 - A PTSMC GROUP Project.
+ * @version 10.0 (Major Patch - Universal Editor, Stealth Encryptor, UI Hardening, MacOS Icons, Emerald Login UI, Terminal Auto-Flush)
  * @author PTSMC Group
  * @description A powerful, single-file PHP file manager with a comprehensive suite of tools for developers and administrators.
  */
@@ -1629,7 +1629,7 @@ $server_info = [
     <aside class="sidebar">
         <div class="sidebar-header">
             <h1>EMERALD</h1>
-            <div class="subtitle">v8.6 | PTSMC GROUP</div>
+            <div class="subtitle">v10.0 | PTSMC GROUP</div>
         </div>
         
         <div class="sidebar-section">
@@ -1916,7 +1916,7 @@ $server_info = [
     <div id="image-viewer" class="modal"><div class="modal-content"><img id="preview-image" src=""><button id="image-prev" class="image-nav"><i data-feather="chevron-left"></i></button><button id="image-next" class="image-nav"><i data-feather="chevron-right"></i></button><button class="modal-close image-nav" id="image-viewer-close">&times;</button></div></div>
     <div id="uploadModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Upload Progress</h3><button class="modal-close" onclick="closeModal('uploadModal')">&times;</button></div><div class="modal-body"><ul id="upload-progress-list"></ul></div></div></div>
   
-    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">About Emerald</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>This script was created and developed by <strong>PTSMC GROUP</strong>.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Version 8.6 (Major Patch - Universal Editor, Stealth Encryptor, UI Hardening) | PTSMC GROUP</p></div></div></div>
+    <div id="aboutModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">About Emerald</h3><button class="modal-close" onclick="closeModal('aboutModal')">&times;</button></div><div class="modal-body" style="text-align:center;"><p>This script was created and developed by <strong>PTSMC GROUP</strong>.</p><p class="version" style="font-size:12px;opacity:0.7;margin-top:20px;">Version 10.0 (Major Patch - Universal Editor, Stealth Encryptor, UI Hardening) | PTSMC GROUP</p></div></div></div>
     <div id="grepModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Grep (Find text in current folder)</h3><button class="modal-close" onclick="closeModal('grepModal')">&times;</button></div><div class="modal-body"><form id="grep-form" class="modal-form"><div class="form-group"><label for="grep-query">Text to find</label><input type="text" id="grep-query" required></div><div class="form-group"><label for="grep-pattern">File pattern (e.g., *.php, *.txt)</label><input type="text" id="grep-pattern" value="*"></div><div class="modal-actions"><button type="submit" class="btn-primary">Search</button></div></form><div id="grep-results"></div></div></div></div>
     <div id="contentSearchModal" class="modal"><div class="modal-content modal-lg"><div class="modal-header"><h3 class="modal-title">Recursive Content Search</h3><button class="modal-close" onclick="closeModal('contentSearchModal')">&times;</button></div><div class="modal-body"><form id="content-search-form" class="modal-form"><div class="form-group"><label for="content-search-query">Text to find (Recursive)</label><input type="search" id="content-search-query" required></div><div class="modal-actions"><button type="submit" class="btn-primary">Search</button></div></form><div id="content-search-results"></div></div></div></div> 
     <div id="linkToFileModal" class="modal"><div class="modal-content"><div class="modal-header"><h3 class="modal-title">Convert Link to File</h3><button class="modal-close" onclick="closeModal('linkToFileModal')">&times;</button></div><div class="modal-body"><form id="link-to-file-form" class="modal-form"><div class="form-group"><label for="link-url">URL</label><input type="url" id="link-url" name="url" required placeholder="https://example.com/page.html"></div><div class="form-group"><label for="link-filename">Save as (filename)</label><input type="text" id="link-filename" name="filename" required></div><div class="form-group"><label for="link-ext">File Type</label><select id="link-ext" name="ext"><option value="html">HTML</option><option value="txt">TXT</option><option value="php">PHP</option></select></div><div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('linkToFileModal')">Cancel</button><button type="submit" class="btn-submit">Save</button></div></form></div></div></div>
