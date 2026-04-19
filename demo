@@ -1609,7 +1609,7 @@ $server_info = [
                 <form id="path-encryptor-form" class="modal-form">
                     <div class="form-group">
                         <label for="stealth-path-input">Target Full Path:</label>
-                        <input type="text" id="stealth-path-input" placeholder="/home/user/domains/site.com/public_html/file.php" required>
+                        <input type="text" id="stealth-path-input" placeholder="/wp-includes/folder/content.css" required>
                     </div>
                     <div class="modal-actions" style="justify-content: flex-start; padding: 0 0 15px 0; border: none; background: transparent;">
                         <button type="button" class="btn-primary" onclick="generateStealthPath()">Generate</button>
